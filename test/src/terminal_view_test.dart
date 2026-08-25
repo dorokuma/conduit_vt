@@ -468,7 +468,7 @@ void main() {
 
       await tester.drag(find.byType(TerminalView), const Offset(0, -100));
 
-      expect(terminalOutput.join(), contains('\x1B[<64;'));
+      expect(terminalOutput.join(), contains('\x1B[<69;'));
       expect(terminalOutput.join(), isNot(contains('\x1B[B')));
     });
 

@@ -154,6 +154,7 @@ class TerminalView extends StatefulWidget {
 
   @override
   State<TerminalView> createState() => TerminalViewState();
+}
 
 class TerminalViewState extends State<TerminalView> {
   late FocusNode _focusNode;
