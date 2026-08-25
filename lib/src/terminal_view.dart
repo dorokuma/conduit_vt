@@ -51,6 +51,7 @@ class TerminalView extends StatefulWidget {
     this.readOnly = false,
     this.hardwareKeyboardOnly = false,
     this.simulateScroll = true,
+    this.altBufferScrollSimulate = true,
   });
 
   /// The underlying terminal that this widget renders.
@@ -147,9 +148,12 @@ class TerminalView extends StatefulWidget {
   /// emulators. True by default.
   final bool simulateScroll;
 
+  /// Whether touch scrolling in the alternate buffer simulates arrow keys
+  /// while mouse reporting is enabled.
+  final bool altBufferScrollSimulate;
+
   @override
   State<TerminalView> createState() => TerminalViewState();
-}
 
 class TerminalViewState extends State<TerminalView> {
   late FocusNode _focusNode;
@@ -271,6 +275,7 @@ class TerminalViewState extends State<TerminalView> {
     child = TerminalScrollGestureHandler(
       terminal: widget.terminal,
       simulateScroll: widget.simulateScroll,
+      altBufferScrollSimulate: widget.altBufferScrollSimulate,
       getCellOffset: (offset) => renderTerminal.getCellOffset(offset),
       getLineHeight: () => renderTerminal.lineHeight,
       child: child,

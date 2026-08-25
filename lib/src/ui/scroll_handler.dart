@@ -13,6 +13,7 @@ class TerminalScrollGestureHandler extends StatefulWidget {
     required this.getCellOffset,
     required this.getLineHeight,
     this.simulateScroll = true,
+    this.altBufferScrollSimulate = true,
     required this.child,
   });
 
@@ -28,6 +29,10 @@ class TerminalScrollGestureHandler extends StatefulWidget {
   /// doesn't declare it supports mouse wheel events. true by default as it
   /// is the default behavior of most terminals.
   final bool simulateScroll;
+
+  /// Whether scrolling in the alternate buffer should use arrow keys when
+  /// mouse reporting is enabled. True by default for touch scrolling.
+  final bool altBufferScrollSimulate;
 
   final Widget child;
 
@@ -85,6 +90,15 @@ class _TerminalScrollGestureHandlerState
   /// will simulate scroll events by sending up/down arrow keys.
   void _sendScrollEvent(bool up) {
     final position = widget.getCellOffset(lastPointerPosition);
+
+    if (widget.altBufferScrollSimulate &&
+        widget.terminal.mouseMode != MouseMode.none &&
+        widget.simulateScroll) {
+      widget.terminal.keyInput(
+        up ? TerminalKey.arrowUp : TerminalKey.arrowDown,
+      );
+      return;
+    }
 
     final handled = widget.terminal.mouseInput(
       up ? TerminalMouseButton.wheelUp : TerminalMouseButton.wheelDown,
