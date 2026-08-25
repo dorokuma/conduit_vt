@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -249,28 +250,38 @@ class TerminalViewState extends State<TerminalView> {
 
   @override
   Widget build(BuildContext context) {
-    Widget child = Scrollable(
-      key: _scrollableKey,
-      controller: _scrollController,
-      viewportBuilder: (context, offset) {
-        return _TerminalView(
-          key: _viewportKey,
-          terminal: widget.terminal,
-          controller: _controller,
-          offset: offset,
-          padding: MediaQuery.of(context).padding,
-          autoResize: widget.autoResize,
-          textStyle: widget.textStyle,
-          textScaler: widget.textScaler ?? MediaQuery.textScalerOf(context),
-          theme: widget.theme,
-          overlays: widget.overlays,
-          focusNode: _focusNode,
-          cursorType: widget.cursorType,
-          alwaysShowCursor: widget.alwaysShowCursor,
-          onEditableRect: _onEditableRect,
-          composingText: _composingText,
-        );
-      },
+    Widget child = ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(
+        dragDevices: {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.stylus,
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.trackpad,
+        },
+      ),
+      child: Scrollable(
+        key: _scrollableKey,
+        controller: _scrollController,
+        viewportBuilder: (context, offset) {
+          return _TerminalView(
+            key: _viewportKey,
+            terminal: widget.terminal,
+            controller: _controller,
+            offset: offset,
+            padding: MediaQuery.of(context).padding,
+            autoResize: widget.autoResize,
+            textStyle: widget.textStyle,
+            textScaler: widget.textScaler ?? MediaQuery.textScalerOf(context),
+            theme: widget.theme,
+            overlays: widget.overlays,
+            focusNode: _focusNode,
+            cursorType: widget.cursorType,
+            alwaysShowCursor: widget.alwaysShowCursor,
+            onEditableRect: _onEditableRect,
+            composingText: _composingText,
+          );
+        },
+      ),
     );
 
     child = TerminalScrollGestureHandler(

@@ -17,7 +17,8 @@ void main() {
       ),
     );
 
-    terminal.write(List<String>.generate(200, (i) => 'scrollback line $i').join('\r\n'));
+    terminal.write(
+        List<String>.generate(200, (i) => 'scrollback line $i').join('\r\n'));
     await tester.pump();
 
     expect(scrollController.hasClients, isTrue);
@@ -48,6 +49,41 @@ void main() {
     expect(scrollController.offset, lessThan(historicalOffset));
   });
 
+  testWidgets('writing at bottom does not pull a scrolled user back down',
+      (tester) async {
+    final terminal = Terminal();
+    final scrollController = ScrollController();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TerminalView(terminal, scrollController: scrollController),
+        ),
+      ),
+    );
+
+    terminal.write(
+        List<String>.generate(200, (i) => 'scrollback line $i').join('\r\n'));
+    await tester.pump();
+    expect(scrollController.position.maxScrollExtent, greaterThan(0));
+
+    await tester.drag(
+      find.byType(TerminalView),
+      const Offset(0, -300),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pumpAndSettle();
+    scrollController.jumpTo(scrollController.position.maxScrollExtent / 2);
+    await tester.pump();
+    final historicalOffset = scrollController.offset;
+    expect(
+        historicalOffset, lessThan(scrollController.position.maxScrollExtent));
+
+    terminal.write('\r\nnew line 1\r\nnew line 2\r\nnew line 3');
+    await tester.pump();
+
+    expect(scrollController.offset, closeTo(historicalOffset, 0.001));
+  });
   testWidgets(
     'alternate screen touch drag with mouse mode simulates arrow keys',
     (tester) async {
