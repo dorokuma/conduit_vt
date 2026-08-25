@@ -419,6 +419,77 @@ void main() {
       expect(terminalOutput.join(), contains('\x1B[B'));
     });
 
+    testWidgets('uses arrow keys instead of mouse reporting when enabled', (
+      tester,
+    ) async {
+      final terminalOutput = <String>[];
+      final terminal = Terminal(onOutput: terminalOutput.add);
+      terminal.useAltBuffer();
+      // Enable normal mouse reporting; the alternate-buffer simulation should
+      // take precedence and avoid emitting a mouse sequence.
+      terminal.write('\x1b[?1000h');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TerminalView(
+            terminal,
+            autofocus: true,
+            simulateScroll: true,
+            altBufferScrollSimulate: true,
+          ),
+        ),
+      );
+
+      await tester.drag(find.byType(TerminalView), const Offset(0, -100));
+
+      expect(terminalOutput.join(), contains('\x1B[B'));
+      expect(terminalOutput.join(), isNot(contains('\x1B[M')));
+    });
+
+    testWidgets('uses SGR mouse reporting when alternate simulation is disabled', (
+      tester,
+    ) async {
+      final terminalOutput = <String>[];
+      final terminal = Terminal(onOutput: terminalOutput.add);
+      terminal.useAltBuffer();
+      // Enable SGR mouse reporting.
+      terminal.write('\x1b[?1000h\x1b[?1006h');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TerminalView(
+            terminal,
+            autofocus: true,
+            simulateScroll: true,
+            altBufferScrollSimulate: false,
+          ),
+        ),
+      );
+
+      await tester.drag(find.byType(TerminalView), const Offset(0, -100));
+
+      expect(terminalOutput.join(), contains('\x1B[<64;'));
+      expect(terminalOutput.join(), isNot(contains('\x1B[B')));
+    });
+
+    testWidgets('keeps simulating arrows when mouse reporting is disabled', (
+      tester,
+    ) async {
+      final terminalOutput = <String>[];
+      final terminal = Terminal(onOutput: terminalOutput.add);
+      terminal.useAltBuffer();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TerminalView(terminal, autofocus: true, simulateScroll: true),
+        ),
+      );
+
+      await tester.drag(find.byType(TerminalView), const Offset(0, -100));
+
+      expect(terminalOutput.join(), contains('\x1B[B'));
+    });
+
     testWidgets('does nothing when disabled', (tester) async {
       final terminalOutput = <String>[];
       final terminal = Terminal(onOutput: terminalOutput.add);
