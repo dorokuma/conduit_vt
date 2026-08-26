@@ -49,6 +49,126 @@ void main() {
     expect(scrollController.offset, lessThan(historicalOffset));
   });
 
+  testWidgets(
+    'primary screen touch drag with onTouchScroll forwards deltas and '
+    'does not move native scrollback or emit sequences',
+    (tester) async {
+      final output = <String>[];
+      final deltas = <int>[];
+      final terminal = Terminal(onOutput: output.add);
+      final scrollController = ScrollController();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TerminalView(
+              terminal,
+              scrollController: scrollController,
+              autofocus: true,
+              onTouchScroll: deltas.add,
+            ),
+          ),
+        ),
+      );
+
+      terminal.write(
+          List<String>.generate(200, (i) => 'scrollback line $i').join('\r\n'));
+      await tester.pump();
+
+      scrollController.jumpTo(0);
+      await tester.pump();
+      final topOffset = scrollController.offset;
+
+      await tester.drag(
+        find.byType(TerminalView),
+        const Offset(0, -300),
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pumpAndSettle();
+
+      // Upward finger drag scrolls toward newer content: positive line delta.
+      expect(deltas, isNotEmpty);
+      expect(deltas.reduce((a, b) => a + b), greaterThan(0));
+
+      // onTouchScroll takes over touch dragging: native scrollback does not
+      // move (physics disabled user dragging).
+      expect(scrollController.offset, closeTo(topOffset, 0.001));
+
+      // No keyInput/mouse escape sequences are sent to the terminal.
+      expect(output.join(), isEmpty);
+    },
+  );
+
+  testWidgets(
+    'primary screen downward touch drag with onTouchScroll reports older '
+    'content',
+    (tester) async {
+      final deltas = <int>[];
+      final terminal = Terminal();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TerminalView(
+            terminal,
+            autofocus: true,
+            onTouchScroll: deltas.add,
+          ),
+        ),
+      );
+
+      terminal.write(
+          List<String>.generate(200, (i) => 'scrollback line $i').join('\r\n'));
+      await tester.pump();
+
+      await tester.drag(
+        find.byType(TerminalView),
+        const Offset(0, 300),
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pumpAndSettle();
+
+      // Downward finger drag scrolls toward older content: negative line delta.
+      expect(deltas, isNotEmpty);
+      expect(deltas.reduce((a, b) => a + b), lessThan(0));
+    },
+  );
+
+  testWidgets(
+    'alternate screen touch drag with onTouchScroll forwards deltas instead '
+    'of arrow/mouse sequences',
+    (tester) async {
+      final output = <String>[];
+      final deltas = <int>[];
+      final terminal = Terminal(onOutput: output.add);
+      terminal.useAltBuffer();
+      // Mouse reporting on: onTouchScroll must take precedence over both the
+      // arrow-key simulation and the SGR mouse reporting.
+      terminal.write('\x1b[?1000h\x1b[?1006h');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TerminalView(
+            terminal,
+            autofocus: true,
+            altBufferScrollSimulate: true,
+            onTouchScroll: deltas.add,
+          ),
+        ),
+      );
+
+      await tester.drag(
+        find.byType(TerminalView),
+        const Offset(0, -300),
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pumpAndSettle();
+
+      expect(deltas, isNotEmpty);
+      // No arrow keys and no mouse sequences are sent to the terminal.
+      expect(output.join(), isEmpty);
+    },
+  );
+
   testWidgets('writing at bottom does not pull a scrolled user back down',
       (tester) async {
     final terminal = Terminal();

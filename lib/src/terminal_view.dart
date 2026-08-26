@@ -120,10 +120,12 @@ class TerminalView extends StatefulWidget {
   final TerminalCursorType cursorType;
 
   /// Optional callback invoked with the line delta for touch scrolling in the
-  /// alternate screen buffer. When non-null, touch scroll gestures are
-  /// forwarded directly as line increments (negative = scrolling toward older
-  /// content, positive = scrolling toward newer content) and no escape
-  /// sequences are sent to the terminal.
+  /// alternate screen buffer and, when non-null, also on the primary screen
+  /// (where the app takes over touch scrolling, e.g. to replay the cached
+  /// scrollback). When non-null, touch scroll gestures are forwarded directly
+  /// as line increments (negative = scrolling toward older content, positive =
+  /// scrolling toward newer content) and no escape sequences are sent to the
+  /// terminal.
   final void Function(int lines)? onTouchScroll;
 
   /// Whether to always show the cursor. This is useful for debugging.
@@ -270,6 +272,13 @@ class TerminalViewState extends State<TerminalView> {
       child: Scrollable(
         key: _scrollableKey,
         controller: _scrollController,
+        // When [onTouchScroll] takes over touch scrolling, disable user
+        // dragging of the internal scrollback so the two Scrollables don't
+        // compete. Programmatic scrolling via [_scrollController] is
+        // unaffected, and mouse wheel / scroll notifications still work.
+        physics: widget.onTouchScroll != null
+            ? const NeverScrollableScrollPhysics()
+            : null,
         viewportBuilder: (context, offset) {
           return _TerminalView(
             key: _viewportKey,

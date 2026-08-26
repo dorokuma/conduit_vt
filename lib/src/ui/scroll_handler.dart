@@ -36,10 +36,12 @@ class TerminalScrollGestureHandler extends StatefulWidget {
   final bool altBufferScrollSimulate;
 
   /// Optional callback invoked with the line delta for touch scrolling in the
-  /// alternate screen buffer. When non-null, touch scroll gestures are
-  /// forwarded directly as line increments (negative = scrolling toward older
-  /// content, positive = scrolling toward newer content) and no escape
-  /// sequences are sent to the terminal.
+  /// alternate screen buffer and, when non-null, also on the primary screen
+  /// (where the app takes over touch scrolling, e.g. to replay the cached
+  /// scrollback). When non-null, touch scroll gestures are forwarded directly
+  /// as line increments (negative = scrolling toward older content, positive =
+  /// scrolling toward newer content) and no escape sequences are sent to the
+  /// terminal.
   final void Function(int lines)? onTouchScroll;
 
   final Widget child;
@@ -143,9 +145,17 @@ class _TerminalScrollGestureHandlerState
 
   @override
   Widget build(BuildContext context) {
-    if (!isAltBuffer) {
+    if (!isAltBuffer && widget.onTouchScroll == null) {
       return widget.child;
     }
+    // On the primary screen, when [onTouchScroll] is non-null, the app takes
+    // over touch scrolling (caching history replay), so we still wrap the
+    // child in an [InfiniteScrollView] to keep receiving the touch gestures.
+    // The app must disable the internal scrollback touch dragging (see
+    // terminal_view.dart physics) to avoid competing Scrollables.
+    //
+    // The onTouchScroll branch in [_onScroll] returns early without emitting
+    // escape sequences, so reusing it on the primary screen is safe.
 
     return Listener(
       onPointerSignal: (event) {
