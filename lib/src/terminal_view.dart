@@ -53,6 +53,7 @@ class TerminalView extends StatefulWidget {
     this.hardwareKeyboardOnly = false,
     this.simulateScroll = true,
     this.altBufferScrollSimulate = true,
+    this.onTouchScroll,
   });
 
   /// The underlying terminal that this widget renders.
@@ -117,6 +118,13 @@ class TerminalView extends StatefulWidget {
 
   /// The type of cursor to use. [TerminalCursorType.block] by default.
   final TerminalCursorType cursorType;
+
+  /// Optional callback invoked with the line delta for touch scrolling in the
+  /// alternate screen buffer. When non-null, touch scroll gestures are
+  /// forwarded directly as line increments (negative = scrolling toward older
+  /// content, positive = scrolling toward newer content) and no escape
+  /// sequences are sent to the terminal.
+  final void Function(int lines)? onTouchScroll;
 
   /// Whether to always show the cursor. This is useful for debugging.
   /// [false] by default.
@@ -288,6 +296,7 @@ class TerminalViewState extends State<TerminalView> {
       terminal: widget.terminal,
       simulateScroll: widget.simulateScroll,
       altBufferScrollSimulate: widget.altBufferScrollSimulate,
+      onTouchScroll: widget.onTouchScroll,
       getCellOffset: (offset) => renderTerminal.getCellOffset(offset),
       getLineHeight: () => renderTerminal.lineHeight,
       child: child,

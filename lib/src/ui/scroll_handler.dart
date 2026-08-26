@@ -14,6 +14,7 @@ class TerminalScrollGestureHandler extends StatefulWidget {
     required this.getLineHeight,
     this.simulateScroll = true,
     this.altBufferScrollSimulate = true,
+    this.onTouchScroll,
     required this.child,
   });
 
@@ -33,6 +34,13 @@ class TerminalScrollGestureHandler extends StatefulWidget {
   /// Whether scrolling in the alternate buffer should use arrow keys when
   /// mouse reporting is enabled. True by default for touch scrolling.
   final bool altBufferScrollSimulate;
+
+  /// Optional callback invoked with the line delta for touch scrolling in the
+  /// alternate screen buffer. When non-null, touch scroll gestures are
+  /// forwarded directly as line increments (negative = scrolling toward older
+  /// content, positive = scrolling toward newer content) and no escape
+  /// sequences are sent to the terminal.
+  final void Function(int lines)? onTouchScroll;
 
   final Widget child;
 
@@ -117,6 +125,14 @@ class _TerminalScrollGestureHandlerState
     final currentLineOffset = offset ~/ widget.getLineHeight();
 
     final delta = currentLineOffset - lastLineOffset;
+
+    if (widget.onTouchScroll != null) {
+      if (delta != 0) {
+        widget.onTouchScroll!(delta);
+      }
+      lastLineOffset = currentLineOffset;
+      return;
+    }
 
     for (var i = 0; i < delta.abs(); i++) {
       _sendScrollEvent(delta < 0);
