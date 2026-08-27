@@ -261,4 +261,56 @@ void main() {
       expect(output.join(), isNot(contains('\x1B[B')));
     },
   );
+
+  testWidgets(
+    'alternate screen wheel-up SGR events report row/col within viewport',
+    (tester) async {
+      final output = <String>[];
+      final terminal = Terminal(onOutput: output.add);
+      terminal.useAltBuffer();
+      terminal.resize(40, 10);
+      terminal.write('\x1b[?1000h\x1b[?1006h');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 400,
+              height: 200,
+              child: TerminalView(
+                terminal,
+                autofocus: true,
+                altBufferScrollSimulate: false,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Upward finger drag (toward newer content => wheel up id 64+4=68).
+      await tester.drag(
+        find.byType(TerminalView),
+        const Offset(0, -50),
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pump();
+
+      final sgr = output
+          .where((s) => s.contains('\x1B[<') && s.endsWith('M'))
+          .join();
+      expect(sgr, isNotEmpty, reason: 'SGR wheel events should be emitted');
+
+      // Row/col in SGR are 1-based; must stay within the viewport.
+      final re = RegExp(r'\x1B\[<(\d+);(\d+);(\d+)M');
+      for (final m in re.allMatches(sgr)) {
+        final col = int.parse(m.group(2)!);
+        final row = int.parse(m.group(3)!);
+        expect(col, inInclusiveRange(1, terminal.viewWidth),
+            reason: 'wheel SGR col out of viewport: ${m.group(0)}');
+        expect(row, inInclusiveRange(1, terminal.viewHeight),
+            reason: 'wheel SGR row out of viewport: ${m.group(0)}');
+      }
+    },
+  );
 }

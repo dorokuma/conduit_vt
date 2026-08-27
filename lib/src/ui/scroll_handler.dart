@@ -159,10 +159,13 @@ class _TerminalScrollGestureHandlerState
 
     return Listener(
       onPointerSignal: (event) {
-        lastPointerPosition = event.position;
+        // event.position is in global (root) coordinates; we need the local
+        // (widget-relative) coordinate so that the cell offset computed via
+        // [widget.getCellOffset] maps to the actual cell under the pointer.
+        lastPointerPosition = event.localPosition;
       },
       onPointerDown: (event) {
-        lastPointerPosition = event.position;
+        lastPointerPosition = event.localPosition;
       },
       child: InfiniteScrollView(onScroll: _onScroll, child: widget.child),
     );

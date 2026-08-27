@@ -321,12 +321,25 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   }
 
   /// Send a mouse event at [offset] with [button] being currently in [buttonState].
+  ///
+  /// The cell offset is clamped to the visible viewport (rows × cols) before
+  /// being forwarded to the terminal. SGR mouse reporting uses 1-based,
+  /// viewport-relative coordinates; clamping here guarantees we never send
+  /// row numbers that exceed the view height (e.g. when the underlying
+  /// [getCellOffset] returns a scrollback-relative line index because the
+  /// terminal buffer contains more lines than the viewport). Without this
+  /// clamp, the remote terminal (e.g. herdr) silently drops clicks whose
+  /// row number is outside the viewport, making TUI elements unclickable.
   bool mouseEvent(
     TerminalMouseButton button,
     TerminalMouseButtonState buttonState,
     Offset offset,
   ) {
-    final position = getCellOffset(offset);
+    final cell = getCellOffset(offset);
+    final position = CellOffset(
+      cell.x.clamp(0, _terminal.viewWidth - 1),
+      cell.y.clamp(0, _terminal.viewHeight - 1),
+    );
     return _terminal.mouseInput(button, buttonState, position);
   }
 
