@@ -405,6 +405,31 @@ class TerminalViewState extends State<TerminalView> {
     _customTextEditKey.currentState?.closeKeyboard();
   }
 
+  /// Show the soft keyboard (opens the input connection regardless of the
+  /// focus keyboard token). Safe to call when already visible.
+  ///
+  /// Bypasses the [FocusNode.consumeKeyboardToken] path: programmatic
+  /// `requestFocus()` from a button never produces a token, so the
+  /// default focus-listener path in [CustomTextEdit] would silently no-op
+  /// and the IME would never open. Going straight to
+  /// [CustomTextEditState.requestKeyboard] opens the connection
+  /// unconditionally. When the focus node does not yet have focus, this
+  /// also requests focus so subsequent key events are delivered.
+  void showSoftKeyboard() {
+    _customTextEditKey.currentState?.requestKeyboard();
+  }
+
+  /// Hide the soft keyboard and drop terminal focus.
+  ///
+  /// [closeKeyboard] closes the input connection directly so the IME
+  /// is dismissed even if focus is held by something else; the
+  /// subsequent [FocusNode.unfocus] drops the focus chain so a later
+  /// tap on the terminal does not immediately re-show the IME.
+  void hideSoftKeyboard() {
+    _customTextEditKey.currentState?.closeKeyboard();
+    _focusNode.unfocus();
+  }
+
   Rect get cursorRect {
     return renderTerminal.cursorOffset & renderTerminal.cellSize;
   }

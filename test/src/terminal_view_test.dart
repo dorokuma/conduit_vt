@@ -604,4 +604,137 @@ void main() {
       },
     );
   });
+
+  group('TerminalView.softKeyboardToggle', () {
+    // Same post-frame timer drain as the keepKeyboardHiddenOnTap group.
+    Future<void> flushTimers(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    // Pulls the [TerminalViewState] off the public GlobalKey so tests
+    // can call the new [showSoftKeyboard] / [hideSoftKeyboard] entry
+    // points without poking at private fields.
+    TerminalViewState viewOf(GlobalKey<TerminalViewState> key) {
+      final state = key.currentState;
+      expect(state, isNotNull, reason: 'TerminalViewState should be mounted');
+      return state!;
+    }
+
+    testWidgets(
+      'showSoftKeyboard opens the IME even with keepKeyboardHiddenOnTap',
+      (tester) async {
+        final terminal = Terminal();
+        final focusNode = FocusNode();
+        final key = GlobalKey<TerminalViewState>();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TerminalView(
+                terminal,
+                key: key,
+                focusNode: focusNode,
+                keepKeyboardHiddenOnTap: true,
+              ),
+            ),
+          ),
+        );
+
+        // Sanity: the suppress-on-tap flag is in effect; the IME starts
+        // hidden and a tap does not show it.
+        expect(focusNode.hasFocus, isFalse);
+        expect(binding.testTextInput.isVisible, isFalse);
+
+        await tester.tap(find.byType(TerminalView));
+        await tester.pump();
+        expect(binding.testTextInput.isVisible, isFalse);
+
+        // Calling showSoftKeyboard must open the IME regardless of the
+        // keepKeyboardHiddenOnTap flag: this is the path the toolbar's
+        // keyboard button uses.
+        viewOf(key).showSoftKeyboard();
+        await tester.pump();
+
+        expect(binding.testTextInput.isVisible, isTrue);
+
+        await flushTimers(tester);
+      },
+    );
+
+    testWidgets('hideSoftKeyboard closes the IME and drops focus', (
+      tester,
+    ) async {
+      final terminal = Terminal();
+      final focusNode = FocusNode();
+      final key = GlobalKey<TerminalViewState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TerminalView(
+              terminal,
+              key: key,
+              focusNode: focusNode,
+              keepKeyboardHiddenOnTap: true,
+            ),
+          ),
+        ),
+      );
+
+      // Open the IME first.
+      viewOf(key).showSoftKeyboard();
+      await tester.pump();
+      expect(binding.testTextInput.isVisible, isTrue);
+      // showSoftKeyboard() requests focus when there is none, so the
+      // focus node is now active. That is the precondition for the
+      // "show" half of the toggle button.
+      expect(focusNode.hasFocus, isTrue);
+
+      // Hide it again: the toolbar's keyboard button does this on a
+      // second tap. The IME must close and the focus node must drop,
+      // so a subsequent tap on the terminal (which is gated by
+      // keepKeyboardHiddenOnTap + an active focus chain) does not
+      // re-show the IME.
+      viewOf(key).hideSoftKeyboard();
+      await tester.pump();
+
+      expect(binding.testTextInput.isVisible, isFalse);
+      expect(focusNode.hasFocus, isFalse);
+
+      await flushTimers(tester);
+    });
+
+    testWidgets('showSoftKeyboard after hideSoftKeyboard reopens the IME', (
+      tester,
+    ) async {
+      final terminal = Terminal();
+      final focusNode = FocusNode();
+      final key = GlobalKey<TerminalViewState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TerminalView(
+              terminal,
+              key: key,
+              focusNode: focusNode,
+              keepKeyboardHiddenOnTap: true,
+            ),
+          ),
+        ),
+      );
+
+      viewOf(key).showSoftKeyboard();
+      await tester.pump();
+      viewOf(key).hideSoftKeyboard();
+      await tester.pump();
+      expect(binding.testTextInput.isVisible, isFalse);
+
+      viewOf(key).showSoftKeyboard();
+      await tester.pump();
+      expect(binding.testTextInput.isVisible, isTrue);
+
+      await flushTimers(tester);
+    });
+  });
 }
