@@ -506,4 +506,102 @@ void main() {
       expect(terminalOutput.join(), isEmpty);
     });
   });
+
+  group('TerminalView.keepKeyboardHiddenOnTap', () {
+    // TerminalView's autoResize schedules a 250ms post-frame timer that is
+    // not cancelled until the widget tree is disposed, which would fail the
+    // post-test "no pending timers" assertion. Settle long enough to drain
+    // it (mirrors the pattern used in terminal_surface_test.dart).
+    Future<void> flushTimers(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    testWidgets('tap does not open the soft keyboard when true', (tester) async {
+      final terminal = Terminal();
+      final focusNode = FocusNode();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TerminalView(
+              terminal,
+              focusNode: focusNode,
+              keepKeyboardHiddenOnTap: true,
+            ),
+          ),
+        ),
+      );
+
+      // The terminal starts with no input connection: no IME.
+      expect(focusNode.hasFocus, isFalse);
+      expect(binding.testTextInput.isVisible, isFalse);
+
+      // Tap the terminal. With keepKeyboardHiddenOnTap: true, neither the
+      // focus request nor the openInputConnection path is taken, so the
+      // soft keyboard must NOT become visible.
+      await tester.tap(find.byType(TerminalView));
+      await tester.pump();
+
+      expect(focusNode.hasFocus, isFalse);
+      expect(binding.testTextInput.isVisible, isFalse);
+
+      await flushTimers(tester);
+    });
+
+    testWidgets('tap does open the soft keyboard by default', (tester) async {
+      final terminal = Terminal();
+      final focusNode = FocusNode();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TerminalView(terminal, focusNode: focusNode),
+          ),
+        ),
+      );
+
+      expect(binding.testTextInput.isVisible, isFalse);
+
+      await tester.tap(find.byType(TerminalView));
+      await tester.pump();
+
+      // Sanity-check: the default behavior still pops the IME so the new
+      // flag is observably a no-op except when set.
+      expect(focusNode.hasFocus, isTrue);
+      expect(binding.testTextInput.isVisible, isTrue);
+
+      await flushTimers(tester);
+    });
+
+    testWidgets(
+      'hardwareKeyboardOnly + keepKeyboardHiddenOnTap skips both branches',
+      (tester) async {
+        final terminal = Terminal();
+        final focusNode = FocusNode();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TerminalView(
+                terminal,
+                focusNode: focusNode,
+                hardwareKeyboardOnly: true,
+                keepKeyboardHiddenOnTap: true,
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byType(TerminalView));
+        await tester.pump();
+
+        // hardwareKeyboardOnly alone would have requested focus; the
+        // keepKeyboardHiddenOnTap short-circuit must still suppress it.
+        expect(focusNode.hasFocus, isFalse);
+        expect(binding.testTextInput.isVisible, isFalse);
+
+        await flushTimers(tester);
+      },
+    );
+  });
 }

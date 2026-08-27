@@ -51,6 +51,7 @@ class TerminalView extends StatefulWidget {
     this.onKeyEvent,
     this.readOnly = false,
     this.hardwareKeyboardOnly = false,
+    this.keepKeyboardHiddenOnTap = false,
     this.simulateScroll = true,
     this.altBufferScrollSimulate = true,
     this.onTouchScroll,
@@ -151,6 +152,15 @@ class TerminalView extends StatefulWidget {
   /// True if only hardware keyboard events should be used as input. This will
   /// also prevent any on-screen keyboard to be shown.
   final bool hardwareKeyboardOnly;
+
+  /// If true, tapping the terminal will NOT request focus or open a text
+  /// input connection — the soft keyboard is never shown for taps, only for
+  /// explicit user actions (e.g. a "show keyboard" toolbar button that calls
+  /// [requestKeyboard] directly). Useful for screens that are primarily
+  /// mouse/touch interactive and where auto-popup of the IME is undesirable
+  /// (for example the herdr session, where the user often taps the TUI to
+  /// select words or links). [false] by default.
+  final bool keepKeyboardHiddenOnTap;
 
   /// If true, when the terminal is in alternate buffer (for example running
   /// vim, man, etc), if the application does not declare that it can handle
@@ -410,6 +420,14 @@ class TerminalViewState extends State<TerminalView> {
 
     if (_selectionClearedByTapDown) {
       _selectionClearedByTapDown = false;
+      return;
+    }
+
+    if (widget.keepKeyboardHiddenOnTap) {
+      // Caller wants taps to NEVER open the soft keyboard. Skip both
+      // branches below: do not request focus (which would make the
+      // platform call into CustomTextEdit and open an input connection
+      // showing the IME), and do not directly open an input connection.
       return;
     }
 
