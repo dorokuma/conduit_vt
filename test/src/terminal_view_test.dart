@@ -516,6 +516,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
     }
 
+    // Helper to read the [TerminalViewState] off the public GlobalKey so
+    // the new hideSoftKeyboard entry point can be invoked without poking
+    // at private fields.
+    TerminalViewState viewOf(GlobalKey<TerminalViewState> key) {
+      final state = key.currentState;
+      expect(state, isNotNull, reason: 'TerminalViewState should be mounted');
+      return state!;
+    }
+
     testWidgets('tap does not open the soft keyboard when true', (tester) async {
       final terminal = Terminal();
       final focusNode = FocusNode();
@@ -572,6 +581,48 @@ void main() {
 
       await flushTimers(tester);
     });
+
+    testWidgets(
+      'hideSoftKeyboard drops the input connection even on Android',
+      (tester) async {
+        final terminal = Terminal();
+        final focusNode = FocusNode();
+        final key = GlobalKey<TerminalViewState>();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TerminalView(
+                terminal,
+                key: key,
+                focusNode: focusNode,
+              ),
+            ),
+          ),
+        );
+
+        // Pop the IME the default way so an input connection is open.
+        await tester.tap(find.byType(TerminalView));
+        await tester.pump();
+        expect(focusNode.hasFocus, isTrue);
+        expect(binding.testTextInput.isVisible, isTrue);
+        expect(viewOf(key).hasInputConnection, isTrue);
+
+        // The toolbar toggle uses hideSoftKeyboard as its second-tap
+        // action. It must close the platform input, drop focus, and
+        // release the TextInputConnection so the next showSoftKeyboard
+        // attaches a fresh one (the connection cache was the reason
+        // Android IMEs ignored earlier close() calls).
+        viewOf(key).hideSoftKeyboard();
+        await tester.pump();
+
+        expect(binding.testTextInput.isVisible, isFalse);
+        expect(focusNode.hasFocus, isFalse);
+        expect(viewOf(key).hasInputConnection, isFalse);
+
+        await flushTimers(tester);
+      },
+    );
 
     testWidgets(
       'hardwareKeyboardOnly + keepKeyboardHiddenOnTap skips both branches',

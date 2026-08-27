@@ -421,13 +421,17 @@ class TerminalViewState extends State<TerminalView> {
 
   /// Hide the soft keyboard and drop terminal focus.
   ///
-  /// [closeKeyboard] closes the input connection directly so the IME
-  /// is dismissed even if focus is held by something else; the
-  /// subsequent [FocusNode.unfocus] drops the focus chain so a later
-  /// tap on the terminal does not immediately re-show the IME.
+  /// The order matters: drop focus first so the focus chain no longer
+  /// re-opens an input connection on the next event, then close the
+  /// [TextInputConnection] directly so the IME is dismissed even if
+  /// focus is held by something else, and finally ask the platform to
+  /// hide its text input as a hard fallback for IMEs (mostly Android
+  /// Gboard / Samsung IME) that keep the input view up after the
+  /// Flutter-side connection is closed.
   void hideSoftKeyboard() {
-    _customTextEditKey.currentState?.closeKeyboard();
     _focusNode.unfocus();
+    _customTextEditKey.currentState?.closeKeyboard();
+    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
   }
 
   Rect get cursorRect {

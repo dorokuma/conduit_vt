@@ -106,8 +106,14 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   }
 
   void closeKeyboard() {
-    if (hasInputConnection) {
-      _connection?.close();
+    // Match the semantics of [_closeInputConnectionIfNeeded]: closing the
+    // TextInputConnection alone is not enough on some Android IMEs, which
+    // keep the input view up until the connection itself is dropped. Setting
+    // [_connection] to null also guarantees a subsequent [requestKeyboard]
+    // is treated as a fresh attach instead of reusing the stale handle.
+    if (_connection != null && _connection!.attached) {
+      _connection!.close();
+      _connection = null;
     }
   }
 
