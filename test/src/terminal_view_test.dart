@@ -844,10 +844,15 @@ void main() {
   // gesture that requested focus, never for a programmatic re-focus
   // from a button). The IME therefore never opened on the first tap.
   //
-  // [CustomTextEdit] now tracks a "_pendingShowKeyboard" flag set by
-  // [requestKeyboard] when focus was not yet held. The focus listener
-  // opens the input connection as soon as focus settles, regardless of
-  // the keyboard token. The tests below pin that contract.
+  // v1.4.33 patched this with a "_pendingShowKeyboard" flag consumed by
+  // the focus listener once focus settled. v1.4.41 removes the focus
+  // wait entirely: [requestKeyboard] attaches and shows the input
+  // connection unconditionally, then requests focus, so the first tap
+  // after focus loss opens the IME even though Android's focus-change
+  // auto-show races the window resize and swallows a later show(). The
+  // tests below pin that contract: on the first tap with no focus, the
+  // connection is attached synchronously and the IME is visible after a
+  // single pump.
   group('TerminalView.firstTapShowKeyboard', () {
     Future<void> flushTimers(WidgetTester tester) async {
       await tester.pump(const Duration(milliseconds: 300));
@@ -903,10 +908,23 @@ void main() {
 
         // The first tap on the toolbar's keyboard button (which calls
         // [showSoftKeyboard] under the hood) must open the IME
-        // immediately, without a second tap. The old behavior would
-        // silently no-op because [FocusNode.consumeKeyboardToken]
-        // returns false for programmatic re-focuses.
+        // immediately, without a second tap. The pre-v1.4.41 behavior
+        // silently no-opped here: [requestKeyboard] only requested focus
+        // and waited for the focus listener, so the tap netted to
+        // "grab focus" and Android's focus-change auto-show raced the
+        // window resize.
         viewOf(key).showSoftKeyboard();
+
+        // First-tap contract: the connection must be attached
+        // synchronously by the show call itself, before any pump, even
+        // though focus is currently held by an anonymous node.
+        expect(
+          viewOf(key).hasInputConnection,
+          isTrue,
+          reason: 'input connection must attach on the first tap, '
+              'without waiting for the focus transition',
+        );
+
         await tester.pump();
 
         expect(
@@ -947,11 +965,20 @@ void main() {
         expect(focusNode.hasFocus, isFalse);
         expect(binding.testTextInput.isVisible, isFalse);
 
-        // Single showSoftKeyboard call: the focus node acquires focus
-        // synchronously, the pending flag is set, the focus-listener
-        // sees the flag and opens the input connection. The IME must
-        // be visible after one pump.
+        // Single showSoftKeyboard call: the input connection attaches
+        // synchronously (no focus wait), one pump shows the IME.
         viewOf(key).showSoftKeyboard();
+
+        // First-tap contract: with no focus at all on mount, the
+        // connection must already be attached before any pump — the IME
+        // open cannot depend on the async focus transition arriving.
+        expect(
+          viewOf(key).hasInputConnection,
+          isTrue,
+          reason: 'input connection must attach on the first tap, '
+              'independently of the focus transition',
+        );
+
         await tester.pump();
 
         expect(binding.testTextInput.isVisible, isTrue);

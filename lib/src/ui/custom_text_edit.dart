@@ -54,14 +54,13 @@ class CustomTextEdit extends StatefulWidget {
 class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   TextInputConnection? _connection;
 
-  /// Set to true by [requestKeyboard] when the focus node is not yet
-  /// focused. When the focus eventually settles, [_onFocusChange] sees
-  /// this flag and opens the input connection directly, bypassing the
-  /// [FocusNode.consumeKeyboardToken] gate (programmatic focus requests
-  /// from a button never produce a token). Without this, the first tap
-  /// on the toolbar's keyboard button silently no-ops and the user has
-  /// to press the button a second time once the focus transition has
-  /// actually completed.
+  /// Legacy intent flag from the v1.4.33 first-tap fix. [requestKeyboard]
+  /// no longer sets it — it opens the input connection unconditionally
+  /// and requests focus afterwards, so the first tap never relies on the
+  /// focus transition. The flag is kept because [_onFocusChange] still
+  /// consults it alongside the [FocusNode.consumeKeyboardToken] gate, and
+  /// [closeKeyboard] clears it so a later focus event cannot re-open the
+  /// IME we just dismissed.
   bool _pendingShowKeyboard = false;
 
   @override
@@ -108,20 +107,13 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   bool get hasInputConnection => _connection != null && _connection!.attached;
 
   void requestKeyboard() {
-    if (widget.focusNode.hasFocus) {
-      _openInputConnection();
-    } else {
-      // Programmatic focus transitions are async: [requestFocus] only
-      // *queues* the change, the actual focus swap happens on the next
-      // frame. Mark the intent so [_onFocusChange] knows to open the
-      // input connection even if the focus chain never produces a
-      // keyboard token (which is the common case for toolbar-driven
-      // focuses — [FocusNode.consumeKeyboardToken] is only true for the
-      // primary user gesture that requested focus, not for subsequent
-      // programmatic re-focuses). Without this flag, the first tap on
-      // the toolbar's keyboard button silently no-ops and the user has
-      // to press the button a second time.
-      _pendingShowKeyboard = true;
+    // Open unconditionally: waiting for the async focus transition means
+    // the first tap after focus loss only grabs focus (Android's
+    // focus-change auto-show races the window resize and the keyboard
+    // never appears until a second tap). Attach+show immediately; the
+    // focus request follows so subsequent key events land in this field.
+    _openInputConnection();
+    if (!widget.focusNode.hasFocus) {
       widget.focusNode.requestFocus();
     }
   }
