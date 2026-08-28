@@ -434,6 +434,20 @@ class TerminalViewState extends State<TerminalView> {
     SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
   }
 
+  /// Dismiss the soft keyboard by name, for the toolbar's second-tap path.
+  ///
+  /// Behaves identically to [hideSoftKeyboard]: drop focus, close the
+  /// [TextInputConnection], and ask the platform to hide text input as
+  /// a hard fallback for IMEs that linger after the connection is
+  /// closed. Exposed under a clearer name so callers (e.g. the toolbar
+  /// keyboard toggle) make their intent obvious without re-implementing
+  /// the three-step teardown. Kept as a separate entry point (rather
+  /// than renaming [hideSoftKeyboard]) so the existing API stays
+  /// source- and binary-compatible.
+  void dismissSoftKeyboard() {
+    hideSoftKeyboard();
+  }
+
   Rect get cursorRect {
     return renderTerminal.cursorOffset & renderTerminal.cellSize;
   }

@@ -787,5 +787,50 @@ void main() {
 
       await flushTimers(tester);
     });
+
+    testWidgets(
+      'dismissSoftKeyboard closes IME, drops focus, releases connection',
+      (tester) async {
+        final terminal = Terminal();
+        final focusNode = FocusNode();
+        final key = GlobalKey<TerminalViewState>();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TerminalView(
+                terminal,
+                key: key,
+                focusNode: focusNode,
+                keepKeyboardHiddenOnTap: true,
+              ),
+            ),
+          ),
+        );
+
+        // Open the IME the toolbar-button way and confirm a live input
+        // connection is attached.
+        viewOf(key).showSoftKeyboard();
+        await tester.pump();
+        expect(binding.testTextInput.isVisible, isTrue);
+        expect(focusNode.hasFocus, isTrue);
+        expect(viewOf(key).hasInputConnection, isTrue);
+
+        // dismissSoftKeyboard is the toolbar's second-tap entry point.
+        // It must: drop focus so the focus chain can't reopen the IME,
+        // close the TextInputConnection (hasInputConnection reflects
+        // the real platform connection, not the animated viewInsets
+        // gradient), and ask the platform to hide text input as a
+        // hard fallback for IMEs that linger.
+        viewOf(key).dismissSoftKeyboard();
+        await tester.pump();
+
+        expect(binding.testTextInput.isVisible, isFalse);
+        expect(focusNode.hasFocus, isFalse);
+        expect(viewOf(key).hasInputConnection, isFalse);
+
+        await flushTimers(tester);
+      },
+    );
   });
 }
