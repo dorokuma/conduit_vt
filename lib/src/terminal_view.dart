@@ -52,6 +52,7 @@ class TerminalView extends StatefulWidget {
     this.readOnly = false,
     this.hardwareKeyboardOnly = false,
     this.keepKeyboardHiddenOnTap = false,
+    this.suppressKeyboardOnFocus = false,
     this.simulateScroll = true,
     this.altBufferScrollSimulate = true,
     this.onTouchScroll,
@@ -161,6 +162,10 @@ class TerminalView extends StatefulWidget {
   /// (for example the herdr session, where the user often taps the TUI to
   /// select words or links). [false] by default.
   final bool keepKeyboardHiddenOnTap;
+
+  /// If true, focus changes never automatically open the soft keyboard.
+  /// Explicit calls to [TerminalViewState.showSoftKeyboard] still open it.
+  final bool suppressKeyboardOnFocus;
 
   /// If true, when the terminal is in alternate buffer (for example running
   /// vim, man, etc), if the application does not declare that it can handle
@@ -329,6 +334,7 @@ class TerminalViewState extends State<TerminalView> {
         inputType: widget.keyboardType,
         keyboardAppearance: widget.keyboardAppearance,
         deleteDetection: widget.deleteDetection,
+        suppressKeyboardOnFocus: widget.suppressKeyboardOnFocus,
         onInsert: _onInsert,
         onDelete: () {
           _scrollToBottom();

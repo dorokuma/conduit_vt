@@ -19,6 +19,7 @@ class CustomTextEdit extends StatefulWidget {
     this.inputAction = TextInputAction.newline,
     this.keyboardAppearance = Brightness.light,
     this.deleteDetection = false,
+    this.suppressKeyboardOnFocus = false,
   });
 
   final Widget child;
@@ -46,6 +47,9 @@ class CustomTextEdit extends StatefulWidget {
   final Brightness keyboardAppearance;
 
   final bool deleteDetection;
+
+  /// Whether focus changes should avoid automatically opening the keyboard.
+  final bool suppressKeyboardOnFocus;
 
   @override
   CustomTextEditState createState() => CustomTextEditState();
@@ -165,14 +169,17 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   }
 
   void _openOrCloseInputConnectionIfNeeded() {
-    if (widget.focusNode.hasFocus &&
-        (_pendingShowKeyboard || widget.focusNode.consumeKeyboardToken())) {
-      // Clear the pending flag regardless of which gate let us in: once
-      // the IME is open, a stale pending flag from a prior dismiss
-      // would otherwise re-open the connection on the next focus event.
-      _pendingShowKeyboard = false;
-      _openInputConnection();
-    } else if (!widget.focusNode.hasFocus) {
+    if (widget.focusNode.hasFocus) {
+      final auto = !widget.suppressKeyboardOnFocus &&
+          widget.focusNode.consumeKeyboardToken();
+      if (_pendingShowKeyboard || auto) {
+        // Clear the pending flag regardless of which gate let us in: once
+        // the IME is open, a stale pending flag from a prior dismiss
+        // would otherwise re-open the connection on the next focus event.
+        _pendingShowKeyboard = false;
+        _openInputConnection();
+      }
+    } else {
       _closeInputConnectionIfNeeded();
     }
   }

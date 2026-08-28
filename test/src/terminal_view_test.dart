@@ -672,6 +672,66 @@ void main() {
     }
 
     testWidgets(
+      'suppressKeyboardOnFocus blocks automatic focus keyboard but allows explicit show',
+      (tester) async {
+        final terminal = Terminal();
+        final focusNode = FocusNode();
+        final key = GlobalKey<TerminalViewState>();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TerminalView(
+                terminal,
+                key: key,
+                focusNode: focusNode,
+                autofocus: true,
+                suppressKeyboardOnFocus: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(focusNode.hasFocus, isTrue);
+        expect(viewOf(key).hasInputConnection, isFalse);
+        expect(binding.testTextInput.isVisible, isFalse);
+
+        viewOf(key).showSoftKeyboard();
+        await tester.pump();
+
+        expect(viewOf(key).hasInputConnection, isTrue);
+        expect(binding.testTextInput.isVisible, isTrue);
+        await flushTimers(tester);
+      },
+    );
+
+    testWidgets(
+      'focus token still opens the IME when suppression is disabled',
+      (tester) async {
+        final terminal = Terminal();
+        final focusNode = FocusNode();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TerminalView(
+                terminal,
+                focusNode: focusNode,
+                autofocus: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(focusNode.hasFocus, isTrue);
+        expect(binding.testTextInput.isVisible, isTrue);
+        await flushTimers(tester);
+      },
+    );
+
+    testWidgets(
       'showSoftKeyboard opens the IME even with keepKeyboardHiddenOnTap',
       (tester) async {
         final terminal = Terminal();
