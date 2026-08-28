@@ -70,6 +70,13 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
   /// [Buffer.defaultWordSeparators] will be used.
   final Set<int>? wordSeparators;
 
+  /// If true, the terminal will ignore the CSI 3J sequence (erase scrollback)
+  /// instead of clearing its scrollback buffer. Other erase operations (CSI 2J
+  /// / 1J / 0J) still run normally. Useful for embedded views that receive
+  /// noisy CSI 3J from applications on minor resizes (e.g. mobile soft-keyboard
+  /// show/hide) and would otherwise lose the user's scrollback history.
+  final bool keepScrollbackOnErase;
+
   Terminal({
     this.maxLines = 1000,
     this.onBell,
@@ -83,6 +90,7 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
     this.onPrivateOSC,
     this.reflowEnabled = true,
     this.wordSeparators,
+    this.keepScrollbackOnErase = false,
   });
 
   late final _parser = EscapeParser(this);
@@ -595,6 +603,9 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
   @override
   void eraseScrollbackOnly() {
+    if (keepScrollbackOnErase) {
+      return;
+    }
     _buffer.clearScrollback();
   }
 

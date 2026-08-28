@@ -193,6 +193,55 @@ void main() {
       expect(lastData, isNull);
     });
   });
+  group('Terminal.keepScrollbackOnErase', () {
+    test('preserves scrollback when CSI 3J is received', () {
+      final terminal = Terminal(
+        maxLines: 1000,
+        keepScrollbackOnErase: true,
+      );
+      terminal.resize(80, 10);
+
+      // Write 200 lines + enough line-feeds to push content into the
+      // scrollback area.
+      final payload = StringBuffer();
+      for (var i = 0; i < 200; i++) {
+        payload.writeln('line $i');
+      }
+      terminal.write(payload.toString());
+
+      final heightBefore = terminal.mainBuffer.height;
+      final scrollBackBefore = terminal.mainBuffer.scrollBack;
+      expect(scrollBackBefore, greaterThan(0),
+          reason: 'scrollback should accumulate from 200 lines');
+
+      terminal.write('\x1B[3J');
+
+      expect(terminal.mainBuffer.height, heightBefore,
+          reason: 'CSI 3J must not drop buffered lines when keepScrollbackOnErase is true');
+      expect(terminal.mainBuffer.scrollBack, scrollBackBefore,
+          reason: 'CSI 3J must not trim scrollback when keepScrollbackOnErase is true');
+    });
+
+    test('clears scrollback by default when CSI 3J is received', () {
+      final terminal = Terminal(maxLines: 1000);
+      terminal.resize(80, 10);
+
+      final payload = StringBuffer();
+      for (var i = 0; i < 200; i++) {
+        payload.writeln('line $i');
+      }
+      terminal.write(payload.toString());
+
+      final scrollBackBefore = terminal.mainBuffer.scrollBack;
+      expect(scrollBackBefore, greaterThan(0),
+          reason: 'scrollback should accumulate from 200 lines');
+
+      terminal.write('\x1B[3J');
+
+      expect(terminal.mainBuffer.scrollBack, 0,
+          reason: 'default behaviour: CSI 3J must empty the scrollback');
+    });
+  });
 }
 
 class _TestInputHandler implements TerminalInputHandler {
