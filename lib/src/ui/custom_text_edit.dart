@@ -54,6 +54,16 @@ class CustomTextEdit extends StatefulWidget {
 class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   TextInputConnection? _connection;
 
+  /// Set to true by [requestKeyboard] when the focus node is not yet
+  /// focused. When the focus eventually settles, [_onFocusChange] sees
+  /// this flag and opens the input connection directly, bypassing the
+  /// [FocusNode.consumeKeyboardToken] gate (programmatic focus requests
+  /// from a button never produce a token). Without this, the first tap
+  /// on the toolbar's keyboard button silently no-ops and the user has
+  /// to press the button a second time once the focus transition has
+  /// actually completed.
+  bool _pendingShowKeyboard = false;
+
   @override
   void initState() {
     widget.focusNode.addListener(_onFocusChange);
@@ -101,6 +111,17 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
     if (widget.focusNode.hasFocus) {
       _openInputConnection();
     } else {
+      // Programmatic focus transitions are async: [requestFocus] only
+      // *queues* the change, the actual focus swap happens on the next
+      // frame. Mark the intent so [_onFocusChange] knows to open the
+      // input connection even if the focus chain never produces a
+      // keyboard token (which is the common case for toolbar-driven
+      // focuses — [FocusNode.consumeKeyboardToken] is only true for the
+      // primary user gesture that requested focus, not for subsequent
+      // programmatic re-focuses). Without this flag, the first tap on
+      // the toolbar's keyboard button silently no-ops and the user has
+      // to press the button a second time.
+      _pendingShowKeyboard = true;
       widget.focusNode.requestFocus();
     }
   }
@@ -115,6 +136,10 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
       _connection!.close();
       _connection = null;
     }
+    // A pending show only makes sense if we are about to (re)gain focus.
+    // Clearing it here ensures a later focus event does not re-open the
+    // IME we just dismissed.
+    _pendingShowKeyboard = false;
   }
 
   void setEditingState(TextEditingValue value) {
@@ -148,9 +173,15 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   }
 
   void _openOrCloseInputConnectionIfNeeded() {
-    if (widget.focusNode.hasFocus && widget.focusNode.consumeKeyboardToken()) {
+    if (widget.focusNode.hasFocus &&
+        (_pendingShowKeyboard || widget.focusNode.consumeKeyboardToken())) {
+      // Clear the pending flag regardless of which gate let us in: once
+      // the IME is open, a stale pending flag from a prior dismiss
+      // would otherwise re-open the connection on the next focus event.
+      _pendingShowKeyboard = false;
       _openInputConnection();
     } else if (!widget.focusNode.hasFocus) {
+      _pendingShowKeyboard = false;
       _closeInputConnectionIfNeeded();
     }
   }

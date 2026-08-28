@@ -833,4 +833,133 @@ void main() {
       },
     );
   });
+
+  // Regression: the toolbar's keyboard button used to need TWO taps the
+  // first time it was invoked after the IME had been hidden. v1.4.33
+  // moved focus to a throwaway FocusNode on dismiss, so on the next
+  // "show" tap the focus node was not focused. [requestKeyboard] only
+  // called [requestFocus] and relied on the focus listener to open the
+  // input connection, but the focus-listener path is gated on
+  // [FocusNode.consumeKeyboardToken] (true only for the primary user
+  // gesture that requested focus, never for a programmatic re-focus
+  // from a button). The IME therefore never opened on the first tap.
+  //
+  // [CustomTextEdit] now tracks a "_pendingShowKeyboard" flag set by
+  // [requestKeyboard] when focus was not yet held. The focus listener
+  // opens the input connection as soon as focus settles, regardless of
+  // the keyboard token. The tests below pin that contract.
+  group('TerminalView.firstTapShowKeyboard', () {
+    Future<void> flushTimers(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    TerminalViewState viewOf(GlobalKey<TerminalViewState> key) {
+      final state = key.currentState;
+      expect(state, isNotNull, reason: 'TerminalViewState should be mounted');
+      return state!;
+    }
+
+    testWidgets(
+      'showSoftKeyboard opens the IME on the first tap after focus was '
+      'moved to an anonymous node (no keyboard token)',
+      (tester) async {
+        final terminal = Terminal();
+        final focusNode = FocusNode();
+        final key = GlobalKey<TerminalViewState>();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: FocusScope(
+                child: TerminalView(
+                  terminal,
+                  key: key,
+                  focusNode: focusNode,
+                  keepKeyboardHiddenOnTap: true,
+                ),
+              ),
+            ),
+          ),
+        );
+
+        // Open the IME once so we have a real input connection to
+        // dismiss (mirrors the toolbar's first show).
+        viewOf(key).showSoftKeyboard();
+        await tester.pump();
+        expect(binding.testTextInput.isVisible, isTrue);
+
+        // Mirror the page's dismiss path: hide the IME, then move
+        // focus to a throwaway node so no focusable widget in the
+        // subtree still owns a focus that could re-open the IME.
+        viewOf(key).dismissSoftKeyboard();
+        await tester.pump();
+        expect(focusNode.hasFocus, isFalse);
+        FocusScope.of(
+          tester.element(find.byType(TerminalView)),
+        ).requestFocus(FocusNode());
+        await tester.pump();
+        // The terminal's own focus node is unfocused at this point.
+        expect(focusNode.hasFocus, isFalse);
+
+        // The first tap on the toolbar's keyboard button (which calls
+        // [showSoftKeyboard] under the hood) must open the IME
+        // immediately, without a second tap. The old behavior would
+        // silently no-op because [FocusNode.consumeKeyboardToken]
+        // returns false for programmatic re-focuses.
+        viewOf(key).showSoftKeyboard();
+        await tester.pump();
+
+        expect(
+          binding.testTextInput.isVisible,
+          isTrue,
+          reason: 'IME should open on the first showSoftKeyboard tap '
+              'after focus was held by an anonymous node',
+        );
+        expect(focusNode.hasFocus, isTrue);
+        expect(viewOf(key).hasInputConnection, isTrue);
+
+        await flushTimers(tester);
+      },
+    );
+
+    testWidgets(
+      'first-tap show works without a prior show when focus is unfocused '
+      'on mount',
+      (tester) async {
+        final terminal = Terminal();
+        final focusNode = FocusNode();
+        final key = GlobalKey<TerminalViewState>();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TerminalView(
+                terminal,
+                key: key,
+                focusNode: focusNode,
+                keepKeyboardHiddenOnTap: true,
+              ),
+            ),
+          ),
+        );
+
+        // No IME on mount.
+        expect(focusNode.hasFocus, isFalse);
+        expect(binding.testTextInput.isVisible, isFalse);
+
+        // Single showSoftKeyboard call: the focus node acquires focus
+        // synchronously, the pending flag is set, the focus-listener
+        // sees the flag and opens the input connection. The IME must
+        // be visible after one pump.
+        viewOf(key).showSoftKeyboard();
+        await tester.pump();
+
+        expect(binding.testTextInput.isVisible, isTrue);
+        expect(focusNode.hasFocus, isTrue);
+        expect(viewOf(key).hasInputConnection, isTrue);
+
+        await flushTimers(tester);
+      },
+    );
+  });
 }
