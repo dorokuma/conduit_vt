@@ -181,7 +181,6 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
       _pendingShowKeyboard = false;
       _openInputConnection();
     } else if (!widget.focusNode.hasFocus) {
-      _pendingShowKeyboard = false;
       _closeInputConnectionIfNeeded();
     }
   }
