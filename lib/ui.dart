@@ -1,5 +1,7 @@
 export 'src/terminal_view.dart';
 export 'src/ui/controller.dart';
+export 'src/ui/render.dart' show TerminalViewportSizeChangedCallback;
+export 'src/ui/terminal_size.dart';
 export 'src/ui/cursor_type.dart';
 export 'src/ui/cell_overlay.dart';
 export 'src/ui/keyboard_visibility.dart';

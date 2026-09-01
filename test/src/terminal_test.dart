@@ -242,6 +242,47 @@ void main() {
           reason: 'default behaviour: CSI 3J must empty the scrollback');
     });
   });
+
+  group('Terminal.resize', () {
+    test('early-returns when columns, rows, and pixels are unchanged', () {
+      var resizeCount = 0;
+      final terminal = Terminal(
+        onResize: (width, height, pixelWidth, pixelHeight) {
+          resizeCount++;
+        },
+      );
+
+      // Default size is 80x24 with pixels normalized from null to 0.
+      terminal.resize(80, 24);
+      terminal.resize(80, 24, 0, 0);
+      expect(resizeCount, 0);
+      expect(terminal.viewWidth, 80);
+      expect(terminal.viewHeight, 24);
+
+      terminal.resize(40, 12, 8, 16);
+      expect(resizeCount, 1);
+      expect(terminal.viewWidth, 40);
+      expect(terminal.viewHeight, 12);
+
+      terminal.resize(40, 12, 8, 16);
+      expect(resizeCount, 1);
+
+      terminal.resize(40, 12, 9, 16);
+      expect(resizeCount, 2);
+    });
+
+    test('notifies listeners after a real resize', () {
+      var notified = 0;
+      final terminal = Terminal();
+      terminal.addListener(() => notified++);
+
+      terminal.resize(40, 12);
+      expect(notified, 1);
+
+      terminal.resize(40, 12);
+      expect(notified, 1);
+    });
+  });
 }
 
 class _TestInputHandler implements TerminalInputHandler {

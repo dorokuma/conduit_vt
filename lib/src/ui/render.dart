@@ -20,6 +20,16 @@ import 'package:conduit_vt/src/ui/terminal_theme.dart';
 
 typedef EditableRectCallback = void Function(Rect rect, Rect caretRect);
 
+/// Called when the viewport size in cells changes while deferred resize is enabled.
+///
+/// Invoked during layout. Listeners must not synchronously call
+/// [State.setState] or [RenderObject.markNeedsLayout]. Conduit only stores the
+/// size and arms a timer.
+typedef TerminalViewportSizeChangedCallback = void Function(
+  TerminalSize size,
+  Size cellSize,
+);
+
 class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   RenderTerminal({
     required Terminal terminal,
@@ -27,6 +37,8 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     required ViewportOffset offset,
     required EdgeInsets padding,
     required bool autoResize,
+    bool deferResize = false,
+    TerminalViewportSizeChangedCallback? onViewportSizeChanged,
     required TerminalStyle textStyle,
     required TextScaler textScaler,
     required TerminalTheme theme,
@@ -41,6 +53,8 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
         _offset = offset,
         _padding = padding,
         _autoResize = autoResize,
+        _deferResize = deferResize,
+        _onViewportSizeChanged = onViewportSizeChanged,
         _overlays = overlays,
         _focusNode = focusNode,
         _cursorType = cursorType,
@@ -93,6 +107,22 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     if (value == _autoResize) return;
     _autoResize = value;
     markNeedsLayout();
+  }
+
+  bool _deferResize;
+  set deferResize(bool value) {
+    if (value == _deferResize) return;
+    _deferResize = value;
+    if (!value) {
+      // true→false: apply the viewport size accumulated while deferred.
+      _resizeTerminalIfNeeded();
+    }
+    markNeedsLayout();
+  }
+
+  TerminalViewportSizeChangedCallback? _onViewportSizeChanged;
+  set onViewportSizeChanged(TerminalViewportSizeChangedCallback? value) {
+    _onViewportSizeChanged = value;
   }
 
   set textStyle(TerminalStyle value) {
@@ -176,7 +206,17 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     markNeedsPaint();
   }
 
+  var _performingLayout = false;
+
   void _onTerminalChange() {
+    // Terminal.resize notifies so Timer-path commitDeferredResize can repaint.
+    // The auto-resize layout path also calls resize, and re-marking layout
+    // while this object is in performLayout throws in debug:
+    // "A RenderObject must not re-dirty itself while still being laid out."
+    if (_performingLayout) {
+      markNeedsPaint();
+      return;
+    }
     markNeedsLayout();
     // This render object is a repaint boundary, so a layout that resolves to
     // the same size (e.g. switching between two same-size alt-screen buffers)
@@ -226,16 +266,21 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
   @override
   void performLayout() {
-    size = constraints.biggest;
+    _performingLayout = true;
+    try {
+      size = constraints.biggest;
 
-    _updateViewportSize();
+      _updateViewportSize();
 
-    _updateScrollOffset();
+      _updateScrollOffset();
 
-    if (_stickToBottom) {
-      _isCorrecting = true;
-      _offset.correctBy(_maxScrollExtent - _scrollOffset);
-      _isCorrecting = false;
+      if (_stickToBottom) {
+        _isCorrecting = true;
+        _offset.correctBy(_maxScrollExtent - _scrollOffset);
+        _isCorrecting = false;
+      }
+    } finally {
+      _performingLayout = false;
     }
   }
 
@@ -372,13 +417,18 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
     if (_viewportSize != viewportSize) {
       _viewportSize = viewportSize;
+      if (_deferResize) {
+        // Invoked during layout. Listeners must not synchronously setState or
+        // markNeedsLayout. Conduit only stores the size and arms a timer.
+        _onViewportSizeChanged?.call(viewportSize, _painter.cellSize);
+      }
       _resizeTerminalIfNeeded();
     }
   }
 
   /// Notify the underlying terminal that the viewport size has changed.
   void _resizeTerminalIfNeeded() {
-    if (_autoResize && _viewportSize != null) {
+    if (_autoResize && !_deferResize && _viewportSize != null) {
       _terminal.resize(
         _viewportSize!.width,
         _viewportSize!.height,
@@ -386,6 +436,22 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
         _painter.cellSize.height.round(),
       );
     }
+  }
+
+  /// Apply the last laid-out viewport size to [Terminal.resize].
+  ///
+  /// Idempotent: [Terminal.resize] early-returns when columns, rows, and
+  /// cell pixels are unchanged. Safe to call repeatedly.
+  void commitDeferredResize() {
+    if (_viewportSize == null) {
+      return;
+    }
+    _terminal.resize(
+      _viewportSize!.width,
+      _viewportSize!.height,
+      _painter.cellSize.width.round(),
+      _painter.cellSize.height.round(),
+    );
   }
 
   /// Update the scroll offset based on the current terminal state. This should

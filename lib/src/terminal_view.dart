@@ -34,6 +34,8 @@ class TerminalView extends StatefulWidget {
     this.padding,
     this.scrollController,
     this.autoResize = true,
+    this.deferResize = false,
+    this.onViewportSizeChanged,
     this.backgroundOpacity = 1,
     this.overlays = const <TerminalCellOverlay>[],
     this.focusNode,
@@ -80,6 +82,18 @@ class TerminalView extends StatefulWidget {
   /// Should this widget automatically notify the underlying terminal when its
   /// size changes. [true] by default.
   final bool autoResize;
+
+  /// When true, viewport size changes update the Flutter layout immediately
+  /// but do not call [Terminal.resize] until [TerminalViewState.commitDeferredResize]
+  /// is invoked. [false] by default, preserving the historical auto-resize path.
+  final bool deferResize;
+
+  /// Called when the viewport size in cells changes while [deferResize] is true.
+  ///
+  /// Invoked during layout. Listeners must not synchronously call
+  /// [State.setState] or [RenderObject.markNeedsLayout]. Conduit only stores
+  /// the size and arms a timer.
+  final TerminalViewportSizeChangedCallback? onViewportSizeChanged;
 
   /// Opacity of the terminal background. Set to 0 to make the terminal
   /// background transparent.
@@ -302,6 +316,8 @@ class TerminalViewState extends State<TerminalView> {
             offset: offset,
             padding: MediaQuery.of(context).padding,
             autoResize: widget.autoResize,
+            deferResize: widget.deferResize,
+            onViewportSizeChanged: widget.onViewportSizeChanged,
             textStyle: widget.textStyle,
             textScaler: widget.textScaler ?? MediaQuery.textScalerOf(context),
             theme: widget.theme,
@@ -401,6 +417,21 @@ class TerminalViewState extends State<TerminalView> {
       overlayChildBuilder: _buildSelectionHandles,
       child: child,
     );
+  }
+
+  /// Apply the last laid-out viewport size to [Terminal.resize].
+  ///
+  /// No-op if the render object is not mounted. Idempotent via the terminal's
+  /// same-size early-return.
+  void commitDeferredResize() {
+    final context = _viewportKey.currentContext;
+    if (context == null) {
+      return;
+    }
+    final renderObject = context.findRenderObject();
+    if (renderObject is RenderTerminal) {
+      renderObject.commitDeferredResize();
+    }
   }
 
   void requestKeyboard() {
@@ -796,6 +827,8 @@ class _TerminalView extends LeafRenderObjectWidget {
     required this.offset,
     required this.padding,
     required this.autoResize,
+    required this.deferResize,
+    this.onViewportSizeChanged,
     required this.textStyle,
     required this.textScaler,
     required this.theme,
@@ -816,6 +849,10 @@ class _TerminalView extends LeafRenderObjectWidget {
   final EdgeInsets padding;
 
   final bool autoResize;
+
+  final bool deferResize;
+
+  final TerminalViewportSizeChangedCallback? onViewportSizeChanged;
 
   final TerminalStyle textStyle;
 
@@ -843,6 +880,8 @@ class _TerminalView extends LeafRenderObjectWidget {
       offset: offset,
       padding: padding,
       autoResize: autoResize,
+      deferResize: deferResize,
+      onViewportSizeChanged: onViewportSizeChanged,
       textStyle: textStyle,
       textScaler: textScaler,
       theme: theme,
@@ -863,6 +902,8 @@ class _TerminalView extends LeafRenderObjectWidget {
       ..offset = offset
       ..padding = padding
       ..autoResize = autoResize
+      ..deferResize = deferResize
+      ..onViewportSizeChanged = onViewportSizeChanged
       ..textStyle = textStyle
       ..textScaler = textScaler
       ..theme = theme

@@ -125,6 +125,10 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
   int _viewHeight = 24;
 
+  int _pixelWidth = 0;
+
+  int _pixelHeight = 0;
+
   final _cursorStyle = CursorStyle();
 
   bool _insertMode = false;
@@ -373,8 +377,17 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
   ]) {
     newWidth = max(newWidth, 1);
     newHeight = max(newHeight, 1);
+    final newPixelWidth = pixelWidth ?? 0;
+    final newPixelHeight = pixelHeight ?? 0;
 
-    onResize?.call(newWidth, newHeight, pixelWidth ?? 0, pixelHeight ?? 0);
+    if (newWidth == _viewWidth &&
+        newHeight == _viewHeight &&
+        newPixelWidth == _pixelWidth &&
+        newPixelHeight == _pixelHeight) {
+      return;
+    }
+
+    onResize?.call(newWidth, newHeight, newPixelWidth, newPixelHeight);
 
     //we need to resize both buffers so that they are ready when we switch between them
     _altBuffer.resize(_viewWidth, _viewHeight, newWidth, newHeight);
@@ -382,6 +395,8 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
     _viewWidth = newWidth;
     _viewHeight = newHeight;
+    _pixelWidth = newPixelWidth;
+    _pixelHeight = newPixelHeight;
 
     if (buffer == _altBuffer) {
       buffer.clearScrollback();
@@ -389,6 +404,8 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
     _altBuffer.resetVerticalMargins();
     _mainBuffer.resetVerticalMargins();
+
+    notifyListeners();
   }
 
   @override
