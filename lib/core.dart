@@ -1,6 +1,7 @@
 export 'src/core/buffer/buffer.dart';
 export 'src/core/buffer/cell_flags.dart';
 export 'src/core/buffer/cell_offset.dart';
+export 'src/core/buffer/hyperlink_pool.dart';
 export 'src/core/buffer/line.dart';
 export 'src/core/buffer/range.dart';
 export 'src/core/buffer/range_block.dart';

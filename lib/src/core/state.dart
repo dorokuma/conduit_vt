@@ -8,6 +8,8 @@ abstract class TerminalState {
 
   CursorStyle get cursor;
 
+  int get currentHyperlinkId;
+
   bool get reflowEnabled;
 
   /* Modes */

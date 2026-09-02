@@ -3,6 +3,7 @@ import 'dart:math' show max;
 import 'package:conduit_vt/src/base/observable.dart';
 import 'package:conduit_vt/src/core/buffer/buffer.dart';
 import 'package:conduit_vt/src/core/buffer/cell_offset.dart';
+import 'package:conduit_vt/src/core/buffer/hyperlink_pool.dart';
 import 'package:conduit_vt/src/core/buffer/line.dart';
 import 'package:conduit_vt/src/core/cursor.dart';
 import 'package:conduit_vt/src/core/escape/emitter.dart';
@@ -112,6 +113,13 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
     isAltBuffer: true,
     wordSeparators: wordSeparators,
   );
+
+  final hyperlinkPool = HyperlinkPool();
+
+  var _currentHyperlinkId = 0;
+
+  @override
+  int get currentHyperlinkId => _currentHyperlinkId;
 
   final _tabStops = TabStops();
 
@@ -935,7 +943,34 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
   }
 
   @override
+  void startHyperlink(String uri, {String? params}) {
+    _currentHyperlinkId = hyperlinkPool.acquire(uri);
+  }
+
+  @override
+  void endHyperlink() {
+    _currentHyperlinkId = 0;
+  }
+
+  @override
   void unknownOSC(String ps, List<String> pt) {
     onPrivateOSC?.call(ps, pt);
+  }
+
+  /// Returns the hyperlink URI at the given cell [offset], or `null` if there is no
+  /// hyperlink or if [offset] is out of bounds.
+  String? getHyperlinkAt(CellOffset offset) {
+    if (offset.y < 0 || offset.y >= _buffer.lines.length) {
+      return null;
+    }
+    final line = _buffer.lines[offset.y];
+    if (offset.x < 0 || offset.x >= line.length) {
+      return null;
+    }
+    final id = line.getHyperlinkId(offset.x);
+    if (id == 0) {
+      return null;
+    }
+    return hyperlinkPool.get(id);
   }
 }

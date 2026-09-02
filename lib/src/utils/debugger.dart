@@ -589,6 +589,16 @@ class _TerminalDebuggerHandler implements EscapeHandler {
   }
 
   @override
+  void startHyperlink(String uri, {String? params}) {
+    onCommand('startHyperlink($uri, params: $params)');
+  }
+
+  @override
+  void endHyperlink() {
+    onCommand('endHyperlink()');
+  }
+
+  @override
   void unknownOSC(String code, List<String> args) {
     onCommand('unknownOSC($code, $args)', error: true);
   }

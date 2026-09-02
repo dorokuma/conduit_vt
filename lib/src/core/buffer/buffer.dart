@@ -119,7 +119,13 @@ class Buffer {
     }
 
     final line = currentLine;
-    line.setCell(_cursorX, codePoint, cellWidth, terminal.cursor);
+    line.setCell(
+      _cursorX,
+      codePoint,
+      cellWidth,
+      terminal.cursor,
+      terminal.currentHyperlinkId,
+    );
 
     if (_cursorX < viewWidth) {
       _cursorX++;

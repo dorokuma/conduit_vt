@@ -1087,6 +1087,15 @@ class EscapeParser {
         case '2':
           handler.setTitle(pt);
           return true;
+        case '8':
+          final params = pt.isEmpty ? null : pt;
+          final uri = _osc.sublist(2).join(';');
+          if (uri.isEmpty) {
+            handler.endHyperlink();
+          } else {
+            handler.startHyperlink(uri, params: params);
+          }
+          return true;
       }
     }
 
