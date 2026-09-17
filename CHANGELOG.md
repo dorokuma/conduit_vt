@@ -1,3 +1,6 @@
+## [Unreleased]
+* Add agent collaboration skeleton and development conventions.
+
 ## [0.1.0] - 2026-06-11
 * Rename the fork package to `conduit_vt`.
 * Add transient terminal cell overlays for Conduit predictive echo.
