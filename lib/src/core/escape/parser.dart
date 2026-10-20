@@ -19,6 +19,10 @@ class EscapeParser {
 
   final _queue = ByteConsumer();
 
+  /// Upper bound for a single OSC payload; anything longer is treated as
+  /// malformed and dropped instead of being rescanned on every write.
+  static const _maxOscLength = 16 * 1024;
+
   /// Start of sequence or character being processed. Useful for debugging.
   var tokenBegin = 0;
 
@@ -251,8 +255,17 @@ class EscapeParser {
         continue;
       }
 
-      if (char > Ascii.NULL && char < Ascii.num0) {
-        // intermediates.add(char);
+      if (char < Ascii.space) {
+        // Control characters abort the sequence. Execute them right away so
+        // newlines, tabs and bells are not swallowed by a broken CSI.
+        if (char != Ascii.ESC) {
+          _processChar(char);
+        }
+        return true;
+      }
+
+      if (char < Ascii.num0) {
+        // ECMA-48 intermediates are 0x20-0x2F only.
         continue;
       }
 
@@ -1123,6 +1136,7 @@ class EscapeParser {
   bool _consumeOsc() {
     _osc.clear();
     final param = StringBuffer();
+    var length = 0;
 
     while (true) {
       if (_queue.isEmpty) {
@@ -1154,7 +1168,15 @@ class EscapeParser {
       if (char == Ascii.semicolon) {
         _osc.add(param.toString());
         param.clear();
+        length++;
         continue;
+      }
+
+      // An unterminated OSC would otherwise be buffered and rescanned on
+      // every write. Drop it once it grows past the limit.
+      if (++length > _maxOscLength) {
+        _osc.clear();
+        return true;
       }
 
       param.writeCharCode(char);

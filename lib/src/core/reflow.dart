@@ -120,7 +120,9 @@ class _LineReflow {
       }
 
       // Leave the last cell to the next iteration if it's a wide char.
-      if (lineFilled && line.getWidth(from + cellsToCopy - 1) == 2) {
+      // Guard cellsToCopy > 1 so a one-cell viewport cannot stall the loop.
+      if (lineFilled && cellsToCopy > 1 &&
+          line.getWidth(from + cellsToCopy - 1) == 2) {
         cellsToCopy--;
       }
 

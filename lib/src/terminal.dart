@@ -470,7 +470,7 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
   @override
   void setTapStop() {
-    _tabStops.isSetAt(_buffer.cursorX);
+    _tabStops.setAt(_buffer.cursorX);
   }
 
   @override
@@ -496,7 +496,10 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
       return;
     }
 
-    for (var i = 0; i < count; i++) {
+    // Bound REP so a hostile escape sequence cannot stall the UI thread.
+    final limit = viewWidth * viewHeight;
+    final repeat = count <= 0 ? 0 : (count > limit ? limit : count);
+    for (var i = 0; i < repeat; i++) {
       _buffer.writeChar(_precedingCodepoint);
     }
   }

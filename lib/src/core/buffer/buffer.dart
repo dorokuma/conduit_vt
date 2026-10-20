@@ -110,7 +110,9 @@ class Buffer {
     codePoint = charset.translate(codePoint);
 
     final cellWidth = unicodeV11.wcwidth(codePoint);
-    if (_cursorX >= terminal.viewWidth) {
+    // Wrap before writing so a double-width glyph never leaves half a cell
+    // at the end of a line with its placeholder on the next one.
+    if (_cursorX + cellWidth > terminal.viewWidth) {
       index();
       setCursorX(0);
       if (terminal.autoWrapMode) {
