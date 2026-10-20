@@ -224,8 +224,19 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
   /// instead just adjusts the start index and length.
   void trimStart(int count) {
     if (count > _length) count = _length;
+    if (count <= 0) {
+      return;
+    }
+    // Detach the dropped children before moving the window, otherwise their
+    // owners keep stale references.
+    for (var i = 0; i < count; i++) {
+      _dropChild(i);
+    }
     _startIndex += count;
     _startIndex %= _array.length;
+    // Keep absolute indexes stable for the remaining items: index is derived
+    // from _absoluteIndex - _absoluteStartIndex.
+    _absoluteStartIndex += count;
     _length -= count;
   }
 
