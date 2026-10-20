@@ -6,8 +6,11 @@ import 'package:quiver/collection.dart';
 /// A cache of laid out [Paragraph]s. This is used to avoid laying out the same
 /// text multiple times, which is expensive.
 class ParagraphCache {
-  ParagraphCache(int maximumSize)
+  ParagraphCache(this.maximumSize)
     : _cache = LruMap<int, Paragraph>(maximumSize: maximumSize);
+
+  /// Maximum number of cached layouts. Evicted paragraphs are disposed.
+  final int maximumSize;
 
   final LruMap<int, Paragraph> _cache;
 
@@ -33,6 +36,14 @@ class ParagraphCache {
     final paragraph = builder.build();
     paragraph.layout(ParagraphConstraints(width: double.infinity));
 
+    if (!_cache.containsKey(key) &&
+        maximumSize > 0 &&
+        _cache.length >= maximumSize) {
+      // Disposing the evicted paragraph frees the native layout object.
+      final oldestKey = _cache.keys.first;
+      _cache.remove(oldestKey)?.dispose();
+    }
+
     _cache[key] = paragraph;
     return paragraph;
   }
@@ -41,6 +52,9 @@ class ParagraphCache {
   /// pair no longer produces the same layout. For example, when a font is
   /// loaded.
   void clear() {
+    for (final paragraph in _cache.values.toList(growable: false)) {
+      paragraph.dispose();
+    }
     _cache.clear();
   }
 
