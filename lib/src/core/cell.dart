@@ -6,10 +6,17 @@ class CellData {
     required this.background,
     required this.flags,
     required this.content,
+    this.hyperlinkId = 0,
   });
 
   factory CellData.empty() {
-    return CellData(foreground: 0, background: 0, flags: 0, content: 0);
+    return CellData(
+      foreground: 0,
+      background: 0,
+      flags: 0,
+      content: 0,
+      hyperlinkId: 0,
+    );
   }
 
   int foreground;
@@ -20,13 +27,15 @@ class CellData {
 
   int content;
 
+  int hyperlinkId;
+
   int getHash() {
-    return hashValues(foreground, background, flags, content);
+    return hashValues(foreground, background, flags, content, hyperlinkId);
   }
 
   @override
   String toString() {
-    return 'CellData{foreground: $foreground, background: $background, flags: $flags, content: $content}';
+    return 'CellData{foreground: $foreground, background: $background, flags: $flags, content: $content, hyperlinkId: $hyperlinkId}';
   }
 }
 

@@ -3,6 +3,7 @@ import 'dart:math' show max;
 import 'package:conduit_vt/src/base/observable.dart';
 import 'package:conduit_vt/src/core/buffer/buffer.dart';
 import 'package:conduit_vt/src/core/buffer/cell_offset.dart';
+import 'package:conduit_vt/src/core/buffer/hyperlink_pool.dart';
 import 'package:conduit_vt/src/core/buffer/line.dart';
 import 'package:conduit_vt/src/core/cursor.dart';
 import 'package:conduit_vt/src/core/escape/emitter.dart';
@@ -70,6 +71,13 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
   /// [Buffer.defaultWordSeparators] will be used.
   final Set<int>? wordSeparators;
 
+  /// If true, the terminal will ignore the CSI 3J sequence (erase scrollback)
+  /// instead of clearing its scrollback buffer. Other erase operations (CSI 2J
+  /// / 1J / 0J) still run normally. Useful for embedded views that receive
+  /// noisy CSI 3J from applications on minor resizes (e.g. mobile soft-keyboard
+  /// show/hide) and would otherwise lose the user's scrollback history.
+  final bool keepScrollbackOnErase;
+
   Terminal({
     this.maxLines = 1000,
     this.onBell,
@@ -83,6 +91,7 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
     this.onPrivateOSC,
     this.reflowEnabled = true,
     this.wordSeparators,
+    this.keepScrollbackOnErase = false,
   });
 
   late final _parser = EscapeParser(this);
@@ -105,6 +114,13 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
     wordSeparators: wordSeparators,
   );
 
+  final hyperlinkPool = HyperlinkPool();
+
+  var _currentHyperlinkId = 0;
+
+  @override
+  int get currentHyperlinkId => _currentHyperlinkId;
+
   final _tabStops = TabStops();
 
   /// The last character written to the buffer. Used to implement some escape
@@ -116,6 +132,10 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
   int _viewWidth = 80;
 
   int _viewHeight = 24;
+
+  int _pixelWidth = 0;
+
+  int _pixelHeight = 0;
 
   final _cursorStyle = CursorStyle();
 
@@ -365,8 +385,17 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
   ]) {
     newWidth = max(newWidth, 1);
     newHeight = max(newHeight, 1);
+    final newPixelWidth = pixelWidth ?? 0;
+    final newPixelHeight = pixelHeight ?? 0;
 
-    onResize?.call(newWidth, newHeight, pixelWidth ?? 0, pixelHeight ?? 0);
+    if (newWidth == _viewWidth &&
+        newHeight == _viewHeight &&
+        newPixelWidth == _pixelWidth &&
+        newPixelHeight == _pixelHeight) {
+      return;
+    }
+
+    onResize?.call(newWidth, newHeight, newPixelWidth, newPixelHeight);
 
     //we need to resize both buffers so that they are ready when we switch between them
     _altBuffer.resize(_viewWidth, _viewHeight, newWidth, newHeight);
@@ -374,6 +403,8 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
     _viewWidth = newWidth;
     _viewHeight = newHeight;
+    _pixelWidth = newPixelWidth;
+    _pixelHeight = newPixelHeight;
 
     if (buffer == _altBuffer) {
       buffer.clearScrollback();
@@ -381,6 +412,8 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
     _altBuffer.resetVerticalMargins();
     _mainBuffer.resetVerticalMargins();
+
+    notifyListeners();
   }
 
   @override
@@ -598,6 +631,9 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
   @override
   void eraseScrollbackOnly() {
+    if (keepScrollbackOnErase) {
+      return;
+    }
     _buffer.clearScrollback();
   }
 
@@ -910,7 +946,34 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
   }
 
   @override
+  void startHyperlink(String uri, {String? params}) {
+    _currentHyperlinkId = hyperlinkPool.acquire(uri);
+  }
+
+  @override
+  void endHyperlink() {
+    _currentHyperlinkId = 0;
+  }
+
+  @override
   void unknownOSC(String ps, List<String> pt) {
     onPrivateOSC?.call(ps, pt);
+  }
+
+  /// Returns the hyperlink URI at the given cell [offset], or `null` if there is no
+  /// hyperlink or if [offset] is out of bounds.
+  String? getHyperlinkAt(CellOffset offset) {
+    if (offset.y < 0 || offset.y >= _buffer.lines.length) {
+      return null;
+    }
+    final line = _buffer.lines[offset.y];
+    if (offset.x < 0 || offset.x >= line.length) {
+      return null;
+    }
+    final id = line.getHyperlinkId(offset.x);
+    if (id == 0) {
+      return null;
+    }
+    return hyperlinkPool.get(id);
   }
 }

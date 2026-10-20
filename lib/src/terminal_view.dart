@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -33,6 +34,8 @@ class TerminalView extends StatefulWidget {
     this.padding,
     this.scrollController,
     this.autoResize = true,
+    this.deferResize = false,
+    this.onViewportSizeChanged,
     this.backgroundOpacity = 1,
     this.overlays = const <TerminalCellOverlay>[],
     this.focusNode,
@@ -50,7 +53,11 @@ class TerminalView extends StatefulWidget {
     this.onKeyEvent,
     this.readOnly = false,
     this.hardwareKeyboardOnly = false,
+    this.keepKeyboardHiddenOnTap = false,
+    this.suppressKeyboardOnFocus = false,
     this.simulateScroll = true,
+    this.altBufferScrollSimulate = true,
+    this.onTouchScroll,
   });
 
   /// The underlying terminal that this widget renders.
@@ -75,6 +82,18 @@ class TerminalView extends StatefulWidget {
   /// Should this widget automatically notify the underlying terminal when its
   /// size changes. [true] by default.
   final bool autoResize;
+
+  /// When true, viewport size changes update the Flutter layout immediately
+  /// but do not call [Terminal.resize] until [TerminalViewState.commitDeferredResize]
+  /// is invoked. [false] by default, preserving the historical auto-resize path.
+  final bool deferResize;
+
+  /// Called when the viewport size in cells changes while [deferResize] is true.
+  ///
+  /// Invoked during layout. Listeners must not synchronously call
+  /// [State.setState] or [RenderObject.markNeedsLayout]. Conduit only stores
+  /// the size and arms a timer.
+  final TerminalViewportSizeChangedCallback? onViewportSizeChanged;
 
   /// Opacity of the terminal background. Set to 0 to make the terminal
   /// background transparent.
@@ -116,6 +135,15 @@ class TerminalView extends StatefulWidget {
   /// The type of cursor to use. [TerminalCursorType.block] by default.
   final TerminalCursorType cursorType;
 
+  /// Optional callback invoked with the line delta for touch scrolling in the
+  /// alternate screen buffer and, when non-null, also on the primary screen
+  /// (where the app takes over touch scrolling, e.g. to replay the cached
+  /// scrollback). When non-null, touch scroll gestures are forwarded directly
+  /// as line increments (negative = scrolling toward older content, positive =
+  /// scrolling toward newer content) and no escape sequences are sent to the
+  /// terminal.
+  final void Function(int lines)? onTouchScroll;
+
   /// Whether to always show the cursor. This is useful for debugging.
   /// [false] by default.
   final bool alwaysShowCursor;
@@ -140,12 +168,29 @@ class TerminalView extends StatefulWidget {
   /// also prevent any on-screen keyboard to be shown.
   final bool hardwareKeyboardOnly;
 
+  /// If true, tapping the terminal will NOT request focus or open a text
+  /// input connection — the soft keyboard is never shown for taps, only for
+  /// explicit user actions (e.g. a "show keyboard" toolbar button that calls
+  /// [requestKeyboard] directly). Useful for screens that are primarily
+  /// mouse/touch interactive and where auto-popup of the IME is undesirable
+  /// (for example the herdr session, where the user often taps the TUI to
+  /// select words or links). [false] by default.
+  final bool keepKeyboardHiddenOnTap;
+
+  /// If true, focus changes never automatically open the soft keyboard.
+  /// Explicit calls to [TerminalViewState.showSoftKeyboard] still open it.
+  final bool suppressKeyboardOnFocus;
+
   /// If true, when the terminal is in alternate buffer (for example running
   /// vim, man, etc), if the application does not declare that it can handle
   /// scrolling, the terminal will simulate scrolling by sending up/down arrow
   /// keys to the application. This is standard behavior for most terminal
   /// emulators. True by default.
   final bool simulateScroll;
+
+  /// Whether touch scrolling in the alternate buffer simulates arrow keys
+  /// while mouse reporting is enabled.
+  final bool altBufferScrollSimulate;
 
   @override
   State<TerminalView> createState() => TerminalViewState();
@@ -244,33 +289,54 @@ class TerminalViewState extends State<TerminalView> {
 
   @override
   Widget build(BuildContext context) {
-    Widget child = Scrollable(
-      key: _scrollableKey,
-      controller: _scrollController,
-      viewportBuilder: (context, offset) {
-        return _TerminalView(
-          key: _viewportKey,
-          terminal: widget.terminal,
-          controller: _controller,
-          offset: offset,
-          padding: MediaQuery.of(context).padding,
-          autoResize: widget.autoResize,
-          textStyle: widget.textStyle,
-          textScaler: widget.textScaler ?? MediaQuery.textScalerOf(context),
-          theme: widget.theme,
-          overlays: widget.overlays,
-          focusNode: _focusNode,
-          cursorType: widget.cursorType,
-          alwaysShowCursor: widget.alwaysShowCursor,
-          onEditableRect: _onEditableRect,
-          composingText: _composingText,
-        );
-      },
+    Widget child = ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(
+        dragDevices: {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.stylus,
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.trackpad,
+        },
+      ),
+      child: Scrollable(
+        key: _scrollableKey,
+        controller: _scrollController,
+        // When [onTouchScroll] takes over touch scrolling, disable user
+        // dragging of the internal scrollback so the two Scrollables don't
+        // compete. Programmatic scrolling via [_scrollController] is
+        // unaffected, and mouse wheel / scroll notifications still work.
+        physics: widget.onTouchScroll != null
+            ? const NeverScrollableScrollPhysics()
+            : null,
+        viewportBuilder: (context, offset) {
+          return _TerminalView(
+            key: _viewportKey,
+            terminal: widget.terminal,
+            controller: _controller,
+            offset: offset,
+            padding: MediaQuery.of(context).padding,
+            autoResize: widget.autoResize,
+            deferResize: widget.deferResize,
+            onViewportSizeChanged: widget.onViewportSizeChanged,
+            textStyle: widget.textStyle,
+            textScaler: widget.textScaler ?? MediaQuery.textScalerOf(context),
+            theme: widget.theme,
+            overlays: widget.overlays,
+            focusNode: _focusNode,
+            cursorType: widget.cursorType,
+            alwaysShowCursor: widget.alwaysShowCursor,
+            onEditableRect: _onEditableRect,
+            composingText: _composingText,
+          );
+        },
+      ),
     );
 
     child = TerminalScrollGestureHandler(
       terminal: widget.terminal,
       simulateScroll: widget.simulateScroll,
+      altBufferScrollSimulate: widget.altBufferScrollSimulate,
+      onTouchScroll: widget.onTouchScroll,
       getCellOffset: (offset) => renderTerminal.getCellOffset(offset),
       getLineHeight: () => renderTerminal.lineHeight,
       child: child,
@@ -284,6 +350,7 @@ class TerminalViewState extends State<TerminalView> {
         inputType: widget.keyboardType,
         keyboardAppearance: widget.keyboardAppearance,
         deleteDetection: widget.deleteDetection,
+        suppressKeyboardOnFocus: widget.suppressKeyboardOnFocus,
         onInsert: _onInsert,
         onDelete: () {
           _scrollToBottom();
@@ -352,12 +419,70 @@ class TerminalViewState extends State<TerminalView> {
     );
   }
 
+  /// Apply the last laid-out viewport size to [Terminal.resize].
+  ///
+  /// No-op if the render object is not mounted. Idempotent via the terminal's
+  /// same-size early-return.
+  void commitDeferredResize() {
+    final context = _viewportKey.currentContext;
+    if (context == null) {
+      return;
+    }
+    final renderObject = context.findRenderObject();
+    if (renderObject is RenderTerminal) {
+      renderObject.commitDeferredResize();
+    }
+  }
+
   void requestKeyboard() {
     _customTextEditKey.currentState?.requestKeyboard();
   }
 
   void closeKeyboard() {
     _customTextEditKey.currentState?.closeKeyboard();
+  }
+
+  /// Show the soft keyboard (opens the input connection regardless of the
+  /// focus keyboard token). Safe to call when already visible.
+  ///
+  /// Bypasses the [FocusNode.consumeKeyboardToken] path: programmatic
+  /// `requestFocus()` from a button never produces a token, so the
+  /// default focus-listener path in [CustomTextEdit] would silently no-op
+  /// and the IME would never open. Going straight to
+  /// [CustomTextEditState.requestKeyboard] opens the connection
+  /// unconditionally. When the focus node does not yet have focus, this
+  /// also requests focus so subsequent key events are delivered.
+  void showSoftKeyboard() {
+    _customTextEditKey.currentState?.requestKeyboard();
+  }
+
+  /// Hide the soft keyboard and drop terminal focus.
+  ///
+  /// The order matters: drop focus first so the focus chain no longer
+  /// re-opens an input connection on the next event, then close the
+  /// [TextInputConnection] directly so the IME is dismissed even if
+  /// focus is held by something else, and finally ask the platform to
+  /// hide its text input as a hard fallback for IMEs (mostly Android
+  /// Gboard / Samsung IME) that keep the input view up after the
+  /// Flutter-side connection is closed.
+  void hideSoftKeyboard() {
+    _focusNode.unfocus();
+    _customTextEditKey.currentState?.closeKeyboard();
+    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+  }
+
+  /// Dismiss the soft keyboard by name, for the toolbar's second-tap path.
+  ///
+  /// Behaves identically to [hideSoftKeyboard]: drop focus, close the
+  /// [TextInputConnection], and ask the platform to hide text input as
+  /// a hard fallback for IMEs that linger after the connection is
+  /// closed. Exposed under a clearer name so callers (e.g. the toolbar
+  /// keyboard toggle) make their intent obvious without re-implementing
+  /// the three-step teardown. Kept as a separate entry point (rather
+  /// than renaming [hideSoftKeyboard]) so the existing API stays
+  /// source- and binary-compatible.
+  void dismissSoftKeyboard() {
+    hideSoftKeyboard();
   }
 
   Rect get cursorRect {
@@ -375,6 +500,14 @@ class TerminalViewState extends State<TerminalView> {
 
     if (_selectionClearedByTapDown) {
       _selectionClearedByTapDown = false;
+      return;
+    }
+
+    if (widget.keepKeyboardHiddenOnTap) {
+      // Caller wants taps to NEVER open the soft keyboard. Skip both
+      // branches below: do not request focus (which would make the
+      // platform call into CustomTextEdit and open an input connection
+      // showing the IME), and do not directly open an input connection.
       return;
     }
 
@@ -694,6 +827,8 @@ class _TerminalView extends LeafRenderObjectWidget {
     required this.offset,
     required this.padding,
     required this.autoResize,
+    required this.deferResize,
+    this.onViewportSizeChanged,
     required this.textStyle,
     required this.textScaler,
     required this.theme,
@@ -714,6 +849,10 @@ class _TerminalView extends LeafRenderObjectWidget {
   final EdgeInsets padding;
 
   final bool autoResize;
+
+  final bool deferResize;
+
+  final TerminalViewportSizeChangedCallback? onViewportSizeChanged;
 
   final TerminalStyle textStyle;
 
@@ -741,6 +880,8 @@ class _TerminalView extends LeafRenderObjectWidget {
       offset: offset,
       padding: padding,
       autoResize: autoResize,
+      deferResize: deferResize,
+      onViewportSizeChanged: onViewportSizeChanged,
       textStyle: textStyle,
       textScaler: textScaler,
       theme: theme,
@@ -761,6 +902,8 @@ class _TerminalView extends LeafRenderObjectWidget {
       ..offset = offset
       ..padding = padding
       ..autoResize = autoResize
+      ..deferResize = deferResize
+      ..onViewportSizeChanged = onViewportSizeChanged
       ..textStyle = textStyle
       ..textScaler = textScaler
       ..theme = theme

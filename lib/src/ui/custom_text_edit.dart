@@ -19,6 +19,7 @@ class CustomTextEdit extends StatefulWidget {
     this.inputAction = TextInputAction.newline,
     this.keyboardAppearance = Brightness.light,
     this.deleteDetection = false,
+    this.suppressKeyboardOnFocus = false,
   });
 
   final Widget child;
@@ -47,12 +48,24 @@ class CustomTextEdit extends StatefulWidget {
 
   final bool deleteDetection;
 
+  /// Whether focus changes should avoid automatically opening the keyboard.
+  final bool suppressKeyboardOnFocus;
+
   @override
   CustomTextEditState createState() => CustomTextEditState();
 }
 
 class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   TextInputConnection? _connection;
+
+  /// Legacy intent flag from the v1.4.33 first-tap fix. [requestKeyboard]
+  /// no longer sets it — it opens the input connection unconditionally
+  /// and requests focus afterwards, so the first tap never relies on the
+  /// focus transition. The flag is kept because [_onFocusChange] still
+  /// consults it alongside the [FocusNode.consumeKeyboardToken] gate, and
+  /// [closeKeyboard] clears it so a later focus event cannot re-open the
+  /// IME we just dismissed.
+  bool _pendingShowKeyboard = false;
 
   @override
   void initState() {
@@ -98,17 +111,31 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   bool get hasInputConnection => _connection != null && _connection!.attached;
 
   void requestKeyboard() {
-    if (widget.focusNode.hasFocus) {
-      _openInputConnection();
-    } else {
+    // Open unconditionally: waiting for the async focus transition means
+    // the first tap after focus loss only grabs focus (Android's
+    // focus-change auto-show races the window resize and the keyboard
+    // never appears until a second tap). Attach+show immediately; the
+    // focus request follows so subsequent key events land in this field.
+    _openInputConnection();
+    if (!widget.focusNode.hasFocus) {
       widget.focusNode.requestFocus();
     }
   }
 
   void closeKeyboard() {
-    if (hasInputConnection) {
-      _connection?.close();
+    // Match the semantics of [_closeInputConnectionIfNeeded]: closing the
+    // TextInputConnection alone is not enough on some Android IMEs, which
+    // keep the input view up until the connection itself is dropped. Setting
+    // [_connection] to null also guarantees a subsequent [requestKeyboard]
+    // is treated as a fresh attach instead of reusing the stale handle.
+    if (_connection != null && _connection!.attached) {
+      _connection!.close();
+      _connection = null;
     }
+    // A pending show only makes sense if we are about to (re)gain focus.
+    // Clearing it here ensures a later focus event does not re-open the
+    // IME we just dismissed.
+    _pendingShowKeyboard = false;
   }
 
   void setEditingState(TextEditingValue value) {
@@ -142,9 +169,17 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   }
 
   void _openOrCloseInputConnectionIfNeeded() {
-    if (widget.focusNode.hasFocus && widget.focusNode.consumeKeyboardToken()) {
-      _openInputConnection();
-    } else if (!widget.focusNode.hasFocus) {
+    if (widget.focusNode.hasFocus) {
+      final auto = !widget.suppressKeyboardOnFocus &&
+          widget.focusNode.consumeKeyboardToken();
+      if (_pendingShowKeyboard || auto) {
+        // Clear the pending flag regardless of which gate let us in: once
+        // the IME is open, a stale pending flag from a prior dismiss
+        // would otherwise re-open the connection on the next focus event.
+        _pendingShowKeyboard = false;
+        _openInputConnection();
+      }
+    } else {
       _closeInputConnectionIfNeeded();
     }
   }

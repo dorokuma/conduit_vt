@@ -54,5 +54,22 @@ void main() {
       parser.write('\x1b[?1;1;256S');
       verifyNever(handler.scrollUp(any));
     });
+
+    test('parses OSC 8 hyperlink open and close', () {
+      final handler = MockEscapeHandler();
+      final parser = EscapeParser(handler);
+
+      // Open with params and URL containing semicolons
+      parser.write('\x1b]8;id=123;https://example.com/a;b=1\x07');
+      verify(handler.startHyperlink('https://example.com/a;b=1', params: 'id=123'));
+
+      // Open without params
+      parser.write('\x1b]8;;https://example.org\x1b\\');
+      verify(handler.startHyperlink('https://example.org', params: null));
+
+      // Close
+      parser.write('\x1b]8;;\x07');
+      verify(handler.endHyperlink());
+    });
   });
 }

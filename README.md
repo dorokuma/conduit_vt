@@ -13,6 +13,13 @@ is not published to pub.dev and is not intended as a drop-in replacement for
 
 Requires Flutter `>=3.19.0`.
 
+## Development conventions
+
+Detailed development and contribution guidelines are maintained across:
+- [AGENTS.md](AGENTS.md): Agent collaboration guide, verification commands, and core invariants.
+- [.agents/notes/README.md](.agents/notes/README.md): Architecture decision records, trigger criteria, and workflow.
+- [.agents/notes/fork-delta.md](.agents/notes/fork-delta.md): Documented intentional divergences from upstream xterm.dart.
+
 ## What this fork adds
 
 - Terminal state accessors used to position predictive overlays (absolute
@@ -54,6 +61,17 @@ TerminalView(
 ```
 
 See `example/` for a runnable terminal.
+
+## Commit messages
+
+Commit messages must follow Conventional Commits (`TYPE: subject` or `TYPE(scope): subject`).
+
+- **Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+- **Scope**: Optional (`[a-z0-9._-]+`).
+- **Subject**: Non-empty, ≤ 72 characters (Chinese and English permitted).
+- **Exemptions**: Merge, revert, `fixup!`, and `squash!` commits.
+
+Enforced locally by the `commit-msg` hook (includes secret scanning and noise word checks).
 
 ## License
 

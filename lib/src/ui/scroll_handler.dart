@@ -13,6 +13,8 @@ class TerminalScrollGestureHandler extends StatefulWidget {
     required this.getCellOffset,
     required this.getLineHeight,
     this.simulateScroll = true,
+    this.altBufferScrollSimulate = true,
+    this.onTouchScroll,
     required this.child,
   });
 
@@ -28,6 +30,19 @@ class TerminalScrollGestureHandler extends StatefulWidget {
   /// doesn't declare it supports mouse wheel events. true by default as it
   /// is the default behavior of most terminals.
   final bool simulateScroll;
+
+  /// Whether scrolling in the alternate buffer should use arrow keys when
+  /// mouse reporting is enabled. True by default for touch scrolling.
+  final bool altBufferScrollSimulate;
+
+  /// Optional callback invoked with the line delta for touch scrolling in the
+  /// alternate screen buffer and, when non-null, also on the primary screen
+  /// (where the app takes over touch scrolling, e.g. to replay the cached
+  /// scrollback). When non-null, touch scroll gestures are forwarded directly
+  /// as line increments (negative = scrolling toward older content, positive =
+  /// scrolling toward newer content) and no escape sequences are sent to the
+  /// terminal.
+  final void Function(int lines)? onTouchScroll;
 
   final Widget child;
 
@@ -86,6 +101,15 @@ class _TerminalScrollGestureHandlerState
   void _sendScrollEvent(bool up) {
     final position = widget.getCellOffset(lastPointerPosition);
 
+    if (widget.altBufferScrollSimulate &&
+        widget.terminal.mouseMode != MouseMode.none &&
+        widget.simulateScroll) {
+      widget.terminal.keyInput(
+        up ? TerminalKey.arrowUp : TerminalKey.arrowDown,
+      );
+      return;
+    }
+
     final handled = widget.terminal.mouseInput(
       up ? TerminalMouseButton.wheelUp : TerminalMouseButton.wheelDown,
       TerminalMouseButtonState.down,
@@ -104,6 +128,14 @@ class _TerminalScrollGestureHandlerState
 
     final delta = currentLineOffset - lastLineOffset;
 
+    if (widget.onTouchScroll != null) {
+      if (delta != 0) {
+        widget.onTouchScroll!(delta);
+      }
+      lastLineOffset = currentLineOffset;
+      return;
+    }
+
     for (var i = 0; i < delta.abs(); i++) {
       _sendScrollEvent(delta < 0);
     }
@@ -113,16 +145,27 @@ class _TerminalScrollGestureHandlerState
 
   @override
   Widget build(BuildContext context) {
-    if (!isAltBuffer) {
+    if (!isAltBuffer && widget.onTouchScroll == null) {
       return widget.child;
     }
+    // On the primary screen, when [onTouchScroll] is non-null, the app takes
+    // over touch scrolling (caching history replay), so we still wrap the
+    // child in an [InfiniteScrollView] to keep receiving the touch gestures.
+    // The app must disable the internal scrollback touch dragging (see
+    // terminal_view.dart physics) to avoid competing Scrollables.
+    //
+    // The onTouchScroll branch in [_onScroll] returns early without emitting
+    // escape sequences, so reusing it on the primary screen is safe.
 
     return Listener(
       onPointerSignal: (event) {
-        lastPointerPosition = event.position;
+        // event.position is in global (root) coordinates; we need the local
+        // (widget-relative) coordinate so that the cell offset computed via
+        // [widget.getCellOffset] maps to the actual cell under the pointer.
+        lastPointerPosition = event.localPosition;
       },
       onPointerDown: (event) {
-        lastPointerPosition = event.position;
+        lastPointerPosition = event.localPosition;
       },
       child: InfiniteScrollView(onScroll: _onScroll, child: widget.child),
     );

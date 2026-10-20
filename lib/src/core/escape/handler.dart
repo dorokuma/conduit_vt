@@ -211,5 +211,9 @@ abstract class EscapeHandler {
 
   void setIconName(String name);
 
+  void startHyperlink(String uri, {String? params});
+
+  void endHyperlink();
+
   void unknownOSC(String code, List<String> args);
 }
