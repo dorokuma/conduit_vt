@@ -34,7 +34,7 @@ abstract class MouseReporter {
             (reportMode == MouseReportMode.normal && y > 223) ||
                 (reportMode == MouseReportMode.utf && y > 2015)
             ? '\x00'
-            : String.fromCharCode(32 + y + 1);
+            : String.fromCharCode(32 + y);
         return "\x1b[M$btn$col$row";
       case MouseReportMode.sgr:
         final buttonID = button.id;

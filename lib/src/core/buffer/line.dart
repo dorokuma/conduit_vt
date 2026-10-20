@@ -70,10 +70,10 @@ class BufferLine with IndexedItem {
   CellData createCellData(int index) {
     final cellData = CellData.empty();
     final offset = index * _cellSize;
-    _data[offset + _cellForeground] = cellData.foreground;
-    _data[offset + _cellBackground] = cellData.background;
-    _data[offset + _cellAttributes] = cellData.flags;
-    _data[offset + _cellContent] = cellData.content;
+    cellData.foreground = _data[offset + _cellForeground];
+    cellData.background = _data[offset + _cellBackground];
+    cellData.flags = _data[offset + _cellAttributes];
+    cellData.content = _data[offset + _cellContent];
     return cellData;
   }
 
